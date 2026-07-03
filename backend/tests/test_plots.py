@@ -290,3 +290,67 @@ async def test_project_detail_includes_default_config(client: AsyncClient):
     assert data["default_plot_config"] is not None
     assert data["default_plot_config"]["name"] == "Default"
     assert len(data["default_plot_config"]["lines"]) == 1
+
+
+# ── Chart type and metadata ──
+
+
+@pytest.mark.asyncio
+async def test_create_config_default_chart_type(client: AsyncClient):
+    pid, vid = await _setup_project_with_version(client)
+    resp = await client.post(f"/api/projects/{pid}/plots", json={
+        "name": "Default Type",
+        "lines": [],
+    })
+    assert resp.status_code == 200
+    assert resp.json()["chart_type"] == "line"
+    assert resp.json()["metadata_json"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_diff_line_config(client: AsyncClient):
+    pid, vid = await _setup_project_with_version(client)
+    resp = await client.post(f"/api/projects/{pid}/plots", json={
+        "name": "Diff View",
+        "chart_type": "diff_line",
+        "metadata_json": {"base_version_id": vid, "compare_version_id": vid, "display_mode": "overlay"},
+        "lines": [],
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["chart_type"] == "diff_line"
+    assert data["metadata_json"]["display_mode"] == "overlay"
+
+
+@pytest.mark.asyncio
+async def test_update_chart_type(client: AsyncClient):
+    pid, vid = await _setup_project_with_version(client)
+    create = await client.post(f"/api/projects/{pid}/plots", json={
+        "name": "Changeable",
+        "chart_type": "line",
+        "lines": [],
+    })
+    cid = create.json()["id"]
+
+    resp = await client.put(f"/api/projects/{pid}/plots/{cid}", json={
+        "chart_type": "diff_line",
+        "metadata_json": {"base_version_id": vid},
+    })
+    assert resp.status_code == 200
+    assert resp.json()["chart_type"] == "diff_line"
+    assert resp.json()["metadata_json"]["base_version_id"] == vid
+
+
+@pytest.mark.asyncio
+async def test_project_detail_includes_all_configs(client: AsyncClient):
+    pid, vid = await _setup_project_with_version(client)
+    await client.post(f"/api/projects/{pid}/plots", json={"name": "Config 1", "lines": []})
+    await client.post(f"/api/projects/{pid}/plots", json={"name": "Config 2", "chart_type": "diff_line", "lines": []})
+
+    resp = await client.get(f"/api/projects/{pid}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["plot_configs"]) == 2
+    types = {c["chart_type"] for c in data["plot_configs"]}
+    assert "line" in types
+    assert "diff_line" in types
