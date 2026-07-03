@@ -164,8 +164,8 @@ export default function ProjectPage() {
 
   // Derived
   const selectableYColumns = useMemo(() => {
-    return availableColumns.filter((c) => c !== xColumn && c !== colorColumn);
-  }, [availableColumns, xColumn, colorColumn]);
+    return availableColumns.filter((c) => c !== colorColumn);
+  }, [availableColumns, colorColumn]);
 
   const enabledLines = useMemo(() => plotLines.filter((l) => l.enabled), [plotLines]);
 
@@ -367,7 +367,6 @@ export default function ProjectPage() {
       setCreatingPlot(true);
       const created = await createPlotConfig(projectId, {
         name: newPlotName.trim(),
-        x_column: availableColumns[0] || undefined,
         lines: [],
       });
       const configs = await getPlotConfigs(projectId);
