@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { getVersionData, type PlotConfig, type Version, type VersionData } from "@/lib/api";
+import { useDarkMode } from "@/lib/useDarkMode";
 import ChartOverlay, { type TraceLine } from "./ChartOverlay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,7 @@ interface PlotCardProps {
 
 export default function PlotCard({ config, projectId, versions, onEdit, onDelete, canDelete }: PlotCardProps) {
   const [versionDataMap, setVersionDataMap] = useState<Map<number, Record<string, number | string>[]>>(new Map());
+  const dark = useDarkMode();
 
   const enabledLines = useMemo(() => config.lines.filter((l) => l.enabled), [config.lines]);
 
@@ -92,6 +94,7 @@ export default function PlotCard({ config, projectId, versions, onEdit, onDelete
           lines={chartLines}
           xColumn={config.x_column || ""}
           tooltipColumns={tooltipColumns}
+          dark={dark}
         />
       </CardContent>
     </Card>

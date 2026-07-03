@@ -29,6 +29,7 @@ interface ChartOverlayProps {
   // Shared
   xColumn: string;
   tooltipColumns: string[];
+  dark?: boolean;
 }
 
 const DEFAULT_COLORS = [
@@ -36,11 +37,19 @@ const DEFAULT_COLORS = [
   "#8b5cf6", "#ec4899", "#06b6d4", "#f97316",
 ];
 
-const CHART_FONT: Partial<Plotly.Font> = {
-  family: "Geist, system-ui, -apple-system, sans-serif",
-  size: 13,
-  color: "#374151",
-};
+function getChartTheme(dark: boolean) {
+  return {
+    font: {
+      family: "Geist, system-ui, -apple-system, sans-serif",
+      size: 13,
+      color: dark ? "#e5e7eb" : "#374151",
+    } as Partial<Plotly.Font>,
+    paper_bgcolor: "transparent",
+    plot_bgcolor: "transparent",
+    gridcolor: dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+    linecolor: dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)",
+  };
+}
 
 export function buildHoverTemplate(
   xColumn: string,
@@ -107,7 +116,9 @@ export default function ChartOverlay({
   colorColumn,
   tooltipColumns,
   lines,
+  dark = false,
 }: ChartOverlayProps) {
+  const theme = getChartTheme(dark);
   // Use lines mode if provided
   if (lines) {
     if (lines.length === 0 || !xColumn) {
@@ -154,14 +165,16 @@ export default function ChartOverlay({
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const layout: any = {
-      font: CHART_FONT,
+      font: theme.font,
+      paper_bgcolor: theme.paper_bgcolor,
+      plot_bgcolor: theme.plot_bgcolor,
       autosize: true,
       height: 500,
       margin: { t: 30, r: hasRightAxis ? 80 : 30, b: 60, l: 60 },
-      xaxis: { title: { text: xColumn }, automargin: true },
-      yaxis: { title: { text: leftCols.join(", ") }, automargin: true },
+      xaxis: { title: { text: xColumn }, automargin: true, gridcolor: theme.gridcolor, linecolor: theme.linecolor, zerolinecolor: theme.gridcolor },
+      yaxis: { title: { text: leftCols.join(", ") }, automargin: true, gridcolor: theme.gridcolor, linecolor: theme.linecolor, zerolinecolor: theme.gridcolor },
       hovermode: tooltipColumns.length === 0 ? false : "x unified",
-      legend: { orientation: "h", y: -0.2 },
+      legend: { orientation: "h", y: -0.2, font: { color: theme.font.color } },
       dragmode: "zoom",
     };
 
@@ -171,6 +184,9 @@ export default function ChartOverlay({
         overlaying: "y",
         side: "right",
         automargin: true,
+        gridcolor: theme.gridcolor,
+        linecolor: theme.linecolor,
+        zerolinecolor: theme.gridcolor,
       };
     }
 
@@ -251,13 +267,16 @@ export default function ChartOverlay({
     <Plot
       data={traces}
       layout={{
+        font: theme.font,
+        paper_bgcolor: theme.paper_bgcolor,
+        plot_bgcolor: theme.plot_bgcolor,
         autosize: true,
         height: 500,
         margin: { t: 30, r: 30, b: 60, l: 60 },
-        xaxis: { title: { text: xColumn }, automargin: true },
-        yaxis: { title: { text: yColumns.join(", ") }, automargin: true },
+        xaxis: { title: { text: xColumn }, automargin: true, gridcolor: theme.gridcolor, linecolor: theme.linecolor },
+        yaxis: { title: { text: yColumns.join(", ") }, automargin: true, gridcolor: theme.gridcolor, linecolor: theme.linecolor },
         hovermode: tooltipColumns.length === 0 ? false : "x unified",
-        legend: { orientation: "h", y: -0.2 },
+        legend: { orientation: "h", y: -0.2, font: { color: theme.font.color } },
         dragmode: "zoom",
       }}
       config={{
