@@ -23,9 +23,7 @@ test.describe("Home page", () => {
     await expect(card).toBeVisible();
     await expect(card.getByText(/\d+ versions?/)).toBeVisible();
 
-    // Cleanup via API
-    const href = await card.getAttribute("data-project-id").catch(() => null);
-    // Fallback: delete via UI
+    // Cleanup via UI
     await card.hover();
     page.on("dialog", (d) => d.accept());
     await card.locator("button").last().click();

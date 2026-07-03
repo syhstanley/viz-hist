@@ -25,8 +25,9 @@ class ProjectResponse(BaseModel):
 
 
 class ProjectDetailResponse(ProjectResponse):
-    """Project with nested versions and default plot config."""
+    """Project with nested versions and plot configs."""
     versions: List["DataVersionResponse"] = []
+    plot_configs: List["PlotConfigResponse"] = []
     default_plot_config: Optional["PlotConfigResponse"] = None
 
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProjects, createProject, deleteProject, type Project } from "@/lib/api";
 import { format } from "date-fns";
@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Calendar, FolderOpen, Database } from "lucide-react";
+import { Plus, Trash2, Calendar, FolderOpen, Database, Moon, Sun } from "lucide-react";
 
 export default function HomePage() {
   const router = useRouter();
@@ -25,6 +25,28 @@ export default function HomePage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Dark mode
+  const [dark, setDark] = useState(false);
+  const darkInit = useRef(false);
+  useEffect(() => {
+    if (darkInit.current) return;
+    darkInit.current = true;
+    const stored = localStorage.getItem("viz-hist-dark");
+    if (stored === "true" || (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync from localStorage on mount
+      setDark(true);
+      document.documentElement.classList.add("dark");
+    }
+  }, []);
+  const toggleDark = () => {
+    setDark((prev) => {
+      const next = !prev;
+      document.documentElement.classList.toggle("dark", next);
+      localStorage.setItem("viz-hist-dark", String(next));
+      return next;
+    });
+  };
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -81,10 +103,15 @@ export default function HomePage() {
               Visualize and compare historical data
             </p>
           </div>
-          <Button onClick={() => setShowCreate(!showCreate)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Project
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={toggleDark} title={dark ? "Light mode" : "Dark mode"}>
+              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <Button onClick={() => setShowCreate(!showCreate)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Project
+            </Button>
+          </div>
         </div>
 
         {/* Create project inline card */}

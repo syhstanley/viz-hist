@@ -33,6 +33,7 @@ export interface Version {
 
 export interface ProjectDetail extends Project {
   versions: Version[];
+  plot_configs: PlotConfig[];
   default_plot_config: PlotConfig | null;
 }
 

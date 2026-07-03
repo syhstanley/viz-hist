@@ -82,6 +82,7 @@ async def get_project(project_id: int, db: AsyncSession = Depends(get_db)):
         created_at=project.created_at,
         updated_at=project.updated_at,
         versions=[v for v in project.versions],
+        plot_configs=[pc for pc in project.plot_configs],
         default_plot_config=default_config,
     )
 

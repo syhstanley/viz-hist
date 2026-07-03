@@ -8,13 +8,17 @@ import {
   getVersionData,
   uploadCSV,
   updateVersionLabel,
+  deleteVersion,
   getDiff,
+  getPlotConfigs,
   createPlotConfig,
   updatePlotConfig,
+  deletePlotConfig,
   type ProjectDetail,
   type Version,
   type VersionData,
   type DiffResult,
+  type PlotConfig,
 } from "@/lib/api";
 import ChartOverlay, { type TraceLine } from "@/components/ChartOverlay";
 import DiffChart, { type DiffDisplayMode } from "@/components/DiffChart";
@@ -61,6 +65,8 @@ import {
   Pencil,
   FileSpreadsheet,
   Settings,
+  Moon,
+  Sun,
 } from "lucide-react";
 
 const COLORS = [
@@ -94,7 +100,9 @@ export default function ProjectPage() {
 
   // Plot config
   const [showPlotConfig, setShowPlotConfig] = useState(false);
+  const [allPlotConfigs, setAllPlotConfigs] = useState<PlotConfig[]>([]);
   const [plotConfigId, setPlotConfigId] = useState<number | null>(null);
+  const [plotConfigName, setPlotConfigName] = useState("Default");
   const [plotLines, setPlotLines] = useState<UIPlotLine[]>([]);
   const [versionDataMap, setVersionDataMap] = useState<Map<number, Record<string, number | string>[]>>(new Map());
 
@@ -134,6 +142,25 @@ export default function ProjectPage() {
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Dark mode
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem("viz-hist-dark");
+    if (stored === "true" || (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync from localStorage on mount
+      setDark(true);
+      document.documentElement.classList.add("dark");
+    }
+  }, []);
+  const toggleDark = () => {
+    setDark((prev) => {
+      const next = !prev;
+      document.documentElement.classList.toggle("dark", next);
+      localStorage.setItem("viz-hist-dark", String(next));
+      return next;
+    });
+  };
+
   // Derived
   const selectableYColumns = useMemo(() => {
     return availableColumns.filter((c) => c !== xColumn && c !== colorColumn);
@@ -147,12 +174,48 @@ export default function ProjectPage() {
     if (configInitialized.current && !savingRef.current) setConfigDirty(true);
   }, [xColumn, colorColumn, tooltipColumns, plotLines]);
 
-  // ── Fetch project (with versions + default plot config) ──
+  // ── Load a specific plot config into UI state ──
+  const loadConfig = useCallback((cfg: PlotConfig, vers: Version[], cols: string[], schemaDef?: { name: string; dtype: string }[]) => {
+    savingRef.current = true; // prevent dirty tracking
+    setPlotConfigId(cfg.id);
+    setPlotConfigName(cfg.name);
+    setXColumn(cfg.x_column || cols[0] || "");
+    setColorColumn(cfg.color_column || "");
+    if (Array.isArray(cfg.tooltip_columns)) {
+      setTooltipColumns(cfg.tooltip_columns);
+    } else if (schemaDef) {
+      setTooltipColumns(getDefaultYCols(schemaDef));
+    }
+    if (cfg.lines.length > 0) {
+      setPlotLines(cfg.lines.map((pl, idx) => {
+        const ver = vers.find((v) => v.id === pl.version_id);
+        return {
+          id: `${pl.version_id}-${pl.y_column}`,
+          dbId: pl.id,
+          versionId: pl.version_id!,
+          versionLabel: ver?.label || `v${pl.version_id}`,
+          yColumn: pl.y_column,
+          color: pl.color || COLORS[idx % COLORS.length],
+          enabled: pl.enabled,
+          sortOrder: pl.sort_order,
+          axis: (pl.axis === "right" ? "right" : "left") as "left" | "right",
+          scalar: pl.scalar ?? 1.0,
+        };
+      }));
+    } else {
+      setPlotLines([]);
+    }
+    setConfigDirty(false);
+    setTimeout(() => { savingRef.current = false; }, 0);
+  }, []);
+
+  // ── Fetch project (with versions + plot configs) ──
   const fetchProject = useCallback(async () => {
     try {
       const proj = await getProject(projectId);
       setProject(proj);
       setVersions(proj.versions);
+      setAllPlotConfigs(proj.plot_configs);
 
       // Find available columns from first version with schema
       const firstWithSchema = proj.versions.find((v) => v.schema_def && v.schema_def.length > 0);
@@ -163,35 +226,7 @@ export default function ProjectPage() {
         if (!configInitialized.current) {
           const cfg = proj.default_plot_config;
           if (cfg) {
-            setPlotConfigId(cfg.id);
-            setXColumn(cfg.x_column || cols[0] || "");
-            setColorColumn(cfg.color_column || "");
-
-            // Restore tooltip columns
-            if (Array.isArray(cfg.tooltip_columns)) {
-              setTooltipColumns(cfg.tooltip_columns);
-            } else {
-              setTooltipColumns(getDefaultYCols(firstWithSchema.schema_def));
-            }
-
-            // Restore plot lines from DB
-            if (cfg.lines.length > 0) {
-              setPlotLines(cfg.lines.map((pl, idx) => {
-                const ver = proj.versions.find((v) => v.id === pl.version_id);
-                return {
-                  id: `${pl.version_id}-${pl.y_column}`,
-                  dbId: pl.id,
-                  versionId: pl.version_id!,
-                  versionLabel: ver?.label || `v${pl.version_id}`,
-                  yColumn: pl.y_column,
-                  color: pl.color || COLORS[idx % COLORS.length],
-                  enabled: pl.enabled,
-                  sortOrder: pl.sort_order,
-                  axis: (pl.axis === "right" ? "right" : "left") as "left" | "right",
-                  scalar: pl.scalar ?? 1.0,
-                };
-              }));
-            }
+            loadConfig(cfg, proj.versions, cols, firstWithSchema.schema_def);
           } else {
             setXColumn(cols[0] || "");
             setTooltipColumns(getDefaultYCols(firstWithSchema.schema_def));
@@ -202,7 +237,7 @@ export default function ProjectPage() {
     } catch {
       setError("Failed to load project.");
     }
-  }, [projectId]);
+  }, [projectId, loadConfig]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetching on mount
@@ -297,7 +332,7 @@ export default function ProjectPage() {
       setSaving(true);
       savingRef.current = true;
       const payload = {
-        name: "Default",
+        name: plotConfigName || "Default",
         x_column: xColumn || undefined,
         color_column: colorColumn || undefined,
         tooltip_columns: tooltipColumns,
@@ -335,6 +370,9 @@ export default function ProjectPage() {
       setConfigDirty(false);
       setShowPlotConfig(false);
       showToast("Plot config saved");
+      // Refresh configs list
+      const configs = await getPlotConfigs(projectId);
+      setAllPlotConfigs(configs);
     } catch { setError("Failed to save plot config."); } finally { setSaving(false); savingRef.current = false; }
   };
 
@@ -361,6 +399,57 @@ export default function ProjectPage() {
     ]);
     setAddLineVersion("");
     setAddLineColumn("");
+  };
+
+  const handleSwitchConfig = (configId: number) => {
+    const cfg = allPlotConfigs.find((c) => c.id === configId);
+    if (!cfg) return;
+    loadConfig(cfg, versions, availableColumns);
+  };
+
+  const handleNewConfig = async () => {
+    const name = prompt("New config name:");
+    if (!name?.trim()) return;
+    try {
+      const created = await createPlotConfig(projectId, {
+        name: name.trim(),
+        x_column: xColumn || undefined,
+        lines: [],
+      });
+      const configs = await getPlotConfigs(projectId);
+      setAllPlotConfigs(configs);
+      loadConfig(created, versions, availableColumns);
+      showToast(`Config "${name.trim()}" created`);
+    } catch { setError("Failed to create config."); }
+  };
+
+  const handleDeleteConfig = async (configId: number) => {
+    if (!confirm("Delete this plot config?")) return;
+    try {
+      await deletePlotConfig(projectId, configId);
+      const configs = await getPlotConfigs(projectId);
+      setAllPlotConfigs(configs);
+      if (plotConfigId === configId) {
+        // Switch to another config or reset
+        if (configs.length > 0) {
+          loadConfig(configs[0], versions, availableColumns);
+        } else {
+          setPlotConfigId(null);
+          setPlotConfigName("Default");
+          setPlotLines([]);
+        }
+      }
+      showToast("Config deleted");
+    } catch { setError("Failed to delete config."); }
+  };
+
+  const handleDeleteVersion = async (versionId: number) => {
+    if (!confirm("Delete this version? Plot lines referencing it will lose their data.")) return;
+    try {
+      await deleteVersion(projectId, versionId);
+      fetchProject();
+      showToast("Version deleted");
+    } catch { setError("Failed to delete version."); }
   };
 
   const showToast = (msg: string) => {
@@ -401,9 +490,14 @@ export default function ProjectPage() {
               {project?.name || "Loading..."}
             </h1>
           </div>
-          <Button variant="outline" size="icon" onClick={() => setShowProjectConfig(true)} title="Project Settings">
-            <Database className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={toggleDark} title={dark ? "Light mode" : "Dark mode"}>
+              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <Button variant="outline" size="icon" onClick={() => setShowProjectConfig(true)} title="Project Settings">
+              <Database className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Error */}
@@ -484,12 +578,18 @@ export default function ProjectPage() {
                               </td>
                               <td className="px-3 py-2 text-muted-foreground">{v.row_count ?? "-"}</td>
                               <td className="px-3 py-2 text-right">
-                                {!isEditing && (
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
-                                    onClick={() => { setEditingVersionId(v.id); setEditLabelValue(v.label); }}>
-                                    <Pencil className="h-3.5 w-3.5" />
+                                <div className="flex items-center justify-end gap-0.5">
+                                  {!isEditing && (
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
+                                      onClick={() => { setEditingVersionId(v.id); setEditLabelValue(v.label); }}>
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                    onClick={() => handleDeleteVersion(v.id)}>
+                                    <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
-                                )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -507,7 +607,34 @@ export default function ProjectPage() {
         <Dialog open={showPlotConfig} onOpenChange={setShowPlotConfig}>
           <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Plot Settings</DialogTitle>
+              <div className="flex items-center justify-between">
+                <DialogTitle>Plot Settings</DialogTitle>
+                <div className="flex items-center gap-2">
+                  {allPlotConfigs.length > 1 && (
+                    <Select value={plotConfigId?.toString() ?? undefined} onValueChange={(v) => v && handleSwitchConfig(Number(v))}>
+                      <SelectTrigger className="h-8 w-40 text-sm">
+                        <SelectValue placeholder="Select config..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allPlotConfigs.map((c) => (
+                          <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {allPlotConfigs.length <= 1 && plotConfigName && (
+                    <span className="text-sm text-muted-foreground">{plotConfigName}</span>
+                  )}
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleNewConfig}>
+                    <Plus className="mr-1 h-3 w-3" />New
+                  </Button>
+                  {plotConfigId && allPlotConfigs.length > 1 && (
+                    <Button variant="outline" size="sm" className="h-8 text-xs text-destructive hover:text-destructive" onClick={() => handleDeleteConfig(plotConfigId)}>
+                      <Trash2 className="mr-1 h-3 w-3" />Delete
+                    </Button>
+                  )}
+                </div>
+              </div>
             </DialogHeader>
             {availableColumns.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">Upload a CSV first in Project Config.</p>
@@ -663,7 +790,7 @@ export default function ProjectPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">
-                {diffMode ? "Diff Chart" : "Chart Overlay"}
+                {diffMode ? "Diff Chart" : (plotConfigName && plotConfigName !== "Default" ? plotConfigName : "Chart Overlay")}
               </CardTitle>
               <div className="flex items-center gap-2">
                 {!diffMode && enabledLines.length > 0 && (
