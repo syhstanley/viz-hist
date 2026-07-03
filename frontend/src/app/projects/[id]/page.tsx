@@ -723,14 +723,13 @@ export default function ProjectPage() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-sm">Type</Label>
-                    <div className="flex gap-1">
-                      <Button size="sm" variant={newPlotType === "line" ? "default" : "outline"} onClick={() => setNewPlotType("line")}>
-                        Line Chart
-                      </Button>
-                      <Button size="sm" variant={newPlotType === "diff_line" ? "default" : "outline"} onClick={() => setNewPlotType("diff_line")}>
-                        Diff Chart
-                      </Button>
-                    </div>
+                    <Select value={newPlotType} onValueChange={(v) => v && setNewPlotType(v as "line" | "diff_line")}>
+                      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="line">Line Chart</SelectItem>
+                        <SelectItem value="diff_line">Diff Chart</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <Button onClick={handleNewConfig} disabled={!newPlotName.trim() || creatingPlot}>
                     {creatingPlot ? "Creating..." : "Create"}
