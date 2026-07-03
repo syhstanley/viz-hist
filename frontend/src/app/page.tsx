@@ -3,9 +3,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  getProjects, createProject, deleteProject,
-  getFolderTree, createFolder, deleteFolder,
-  type Project, type FolderTree,
+  getProjects, createProject, deleteProject, updateProject,
+  getFolderTree, getFolders, createFolder, deleteFolder, updateFolder,
+  type Project, type Folder, type FolderTree,
 } from "@/lib/api";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -20,11 +20,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Trash2, Calendar, FolderOpen, Database,
-  Moon, Sun, ChevronRight, ChevronDown, FolderPlus, FileText,
+  Moon, Sun, ChevronRight, ChevronDown, FolderPlus, FileText, MoveRight,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 export default function HomePage() {
   const router = useRouter();
@@ -39,6 +42,12 @@ export default function HomePage() {
   const [createFolderId, setCreateFolderId] = useState<number | null>(null);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Move dialog
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [moveTarget, setMoveTarget] = useState<{ type: "folder" | "project"; id: number; name: string } | null>(null);
+  const [moveDestination, setMoveDestination] = useState<string>("__root__");
+  const [allFolders, setAllFolders] = useState<Folder[]>([]);
 
   // Dark mode
   const [dark, setDark] = useState(false);
@@ -65,8 +74,9 @@ export default function HomePage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [tree, projects] = await Promise.all([getFolderTree(), getProjects()]);
+      const [tree, projects, folders] = await Promise.all([getFolderTree(), getProjects(), getFolders()]);
       setFolderTree(tree);
+      setAllFolders(folders);
       // Root projects = projects not in any folder
       setRootProjects(projects.filter((p) => p.folder_id === null));
       setError(null);
@@ -132,6 +142,27 @@ export default function HomePage() {
     } catch { setError("Failed to delete folder."); }
   };
 
+  const openMoveDialog = (type: "folder" | "project", id: number, name: string) => {
+    setMoveTarget({ type, id, name });
+    setMoveDestination("__root__");
+    setShowMoveDialog(true);
+  };
+
+  const handleMove = async () => {
+    if (!moveTarget) return;
+    const destId = moveDestination === "__root__" ? null : Number(moveDestination);
+    try {
+      if (moveTarget.type === "folder") {
+        await updateFolder(moveTarget.id, { parent_id: destId });
+      } else {
+        await updateProject(moveTarget.id, { folder_id: destId });
+      }
+      setShowMoveDialog(false);
+      setMoveTarget(null);
+      fetchData();
+    } catch { setError("Failed to move item."); }
+  };
+
   const ProjectCard = ({ project }: { project: Project }) => (
     <Card
       className="group cursor-pointer transition-shadow hover:shadow-md"
@@ -145,14 +176,23 @@ export default function HomePage() {
               Created {format(new Date(project.created_at), "MMM d, yyyy HH:mm")}
             </CardDescription>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-            onClick={(e) => handleDelete(e, project.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button
+              variant="ghost" size="icon"
+              className="text-muted-foreground"
+              onClick={(e) => { e.stopPropagation(); openMoveDialog("project", project.id, project.name); }}
+              title="Move to folder"
+            >
+              <MoveRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost" size="icon"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={(e) => handleDelete(e, project.id)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex gap-2">
@@ -198,6 +238,14 @@ export default function HomePage() {
             title="New subfolder"
           >
             <FolderPlus className="h-3 w-3" />
+          </Button>
+          <Button
+            variant="ghost" size="icon"
+            className="h-6 w-6 opacity-0 group-hover/folder:opacity-100 transition-opacity text-muted-foreground"
+            onClick={() => openMoveDialog("folder", folder.id, folder.name)}
+            title="Move folder"
+          >
+            <MoveRight className="h-3 w-3" />
           </Button>
           <Button
             variant="ghost" size="icon"
@@ -282,6 +330,36 @@ export default function HomePage() {
               />
               <Button className="w-full" onClick={handleCreate} disabled={!newName.trim() || creating}>
                 {creating ? "Creating..." : `Create ${createMode === "project" ? "Project" : "Folder"}`}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Move Dialog */}
+        <Dialog open={showMoveDialog} onOpenChange={setShowMoveDialog}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Move {moveTarget?.type === "folder" ? "Folder" : "Project"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Move <span className="font-medium text-foreground">{moveTarget?.name}</span> to:
+              </p>
+              <Select value={moveDestination} onValueChange={(v) => setMoveDestination(v ?? "__root__")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__root__">/ (Root)</SelectItem>
+                  {allFolders
+                    .filter((f) => !(moveTarget?.type === "folder" && f.id === moveTarget.id))
+                    .map((f) => (
+                      <SelectItem key={f.id} value={f.id.toString()}>{f.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <Button className="w-full" onClick={handleMove}>
+                Move
               </Button>
             </div>
           </DialogContent>
