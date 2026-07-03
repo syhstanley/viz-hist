@@ -70,9 +70,11 @@ async def create_plot_config(
     config = PlotConfig(
         project_id=project_id,
         name=body.name,
+        chart_type=body.chart_type,
         x_column=body.x_column,
         color_column=body.color_column,
         tooltip_columns=body.tooltip_columns,
+        metadata_json=body.metadata_json,
         is_default=is_first,
     )
     db.add(config)
@@ -114,10 +116,14 @@ async def update_plot_config(
 
     if body.name is not None:
         config.name = body.name
+    if body.chart_type is not None:
+        config.chart_type = body.chart_type
     if body.x_column is not None:
         config.x_column = body.x_column
     if body.color_column is not None:
         config.color_column = body.color_column
+    if body.metadata_json is not None:
+        config.metadata_json = body.metadata_json
     if body.tooltip_columns is not None:
         config.tooltip_columns = body.tooltip_columns
 

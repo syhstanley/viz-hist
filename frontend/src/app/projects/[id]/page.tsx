@@ -8,17 +8,14 @@ import {
   uploadCSV,
   updateVersionLabel,
   deleteVersion,
-  getDiff,
   getPlotConfigs,
   createPlotConfig,
   updatePlotConfig,
   deletePlotConfig,
   type ProjectDetail,
   type Version,
-  type DiffResult,
   type PlotConfig,
 } from "@/lib/api";
-import DiffChart, { type DiffDisplayMode } from "@/components/DiffChart";
 import PlotCard from "@/components/PlotCard";
 
 import { Button } from "@/components/ui/button";
@@ -27,7 +24,6 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import {
   Card,
   CardContent,
@@ -115,6 +111,7 @@ export default function ProjectPage() {
   // Add plot form
   const [showAddPlot, setShowAddPlot] = useState(false);
   const [newPlotName, setNewPlotName] = useState("");
+  const [newPlotType, setNewPlotType] = useState<"line" | "diff_line">("line");
   const [creatingPlot, setCreatingPlot] = useState(false);
 
   // Upload state
@@ -126,13 +123,7 @@ export default function ProjectPage() {
   const [editingVersionId, setEditingVersionId] = useState<number | null>(null);
   const [editLabelValue, setEditLabelValue] = useState("");
 
-  // Diff state
-  const [diffMode, setDiffMode] = useState(false);
-  const [baseVersionId, setBaseVersionId] = useState<number | null>(null);
-  const [compareVersionId, setCompareVersionId] = useState<number | null>(null);
-  const [diffResult, setDiffResult] = useState<DiffResult | null>(null);
-  const [diffYColumn, setDiffYColumn] = useState<string>("");
-  const [diffDisplayMode, setDiffDisplayMode] = useState<DiffDisplayMode>("overlay");
+  // (Diff is now handled per-PlotCard with chart_type="diff_line")
 
   // Save config state
   const [configDirty, setConfigDirty] = useState(false);
@@ -245,23 +236,6 @@ export default function ProjectPage() {
     void fetchProject();
   }, [fetchProject]);
 
-  // ── Load diff ──
-  useEffect(() => {
-    if (!diffMode || baseVersionId === null || compareVersionId === null) {
-      const id = requestAnimationFrame(() => setDiffResult(null));
-      return () => cancelAnimationFrame(id);
-    }
-    const loadDiff = async () => {
-      try {
-        const result = await getDiff(projectId, baseVersionId, compareVersionId);
-        setDiffResult(result);
-        if (!diffYColumn && result.columns.length > 0) setDiffYColumn(result.columns[0]);
-      } catch { setError("Failed to load diff."); }
-    };
-    void loadDiff();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [diffMode, baseVersionId, compareVersionId, projectId]);
-
   // ── Handlers ──
 
   const handleUpload = async () => {
@@ -367,6 +341,7 @@ export default function ProjectPage() {
       setCreatingPlot(true);
       const created = await createPlotConfig(projectId, {
         name: newPlotName.trim(),
+        chart_type: newPlotType,
         lines: [],
       });
       const configs = await getPlotConfigs(projectId);
@@ -713,82 +688,6 @@ export default function ProjectPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Diff section */}
-        <Card className="mb-4">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">{diffMode ? "Diff Chart" : "Diff"}</CardTitle>
-              <div className="flex items-center gap-1.5">
-                <Label className="text-sm text-muted-foreground cursor-pointer" htmlFor="diff-toggle">Diff</Label>
-                <Switch id="diff-toggle" checked={diffMode} onCheckedChange={setDiffMode} />
-              </div>
-            </div>
-            {diffMode && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-3">
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Base Version</Label>
-                  <Select value={baseVersionId?.toString() ?? undefined} onValueChange={(v) => setBaseVersionId(v ? Number(v) : null)}>
-                    <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                    <SelectContent>
-                      {versions.map((v) => (<SelectItem key={v.id} value={v.id.toString()}>{v.label}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Compare Version</Label>
-                  <Select value={compareVersionId?.toString() ?? undefined} onValueChange={(v) => setCompareVersionId(v ? Number(v) : null)}>
-                    <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                    <SelectContent>
-                      {versions.map((v) => (<SelectItem key={v.id} value={v.id.toString()}>{v.label}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Display</Label>
-                  <div className="flex gap-1">
-                    {([["overlay", "Overlay"], ["absolute", "Abs Diff"], ["percentage", "% Diff"]] as const).map(([mode, modeLabel]) => (
-                      <Button key={mode} size="sm" variant={diffDisplayMode === mode ? "default" : "outline"} className="flex-1 text-xs" onClick={() => setDiffDisplayMode(mode as DiffDisplayMode)}>
-                        {modeLabel}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                {diffResult && diffResult.columns.length > 1 && (
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">Diff Column</Label>
-                    <Select value={diffYColumn} onValueChange={(v) => v && setDiffYColumn(v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {diffResult.columns.map((col) => (<SelectItem key={col} value={col}>{col}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardHeader>
-          {diffMode && (
-            <CardContent>
-              {diffResult ? (
-                <DiffChart
-                  baseData={diffResult.base}
-                  compareData={diffResult.compare}
-                  diffData={diffResult.diff}
-                  diffPctData={diffResult.diff_pct}
-                  timeColumn={diffResult.index_column}
-                  valueColumns={diffResult.columns}
-                  selectedYColumn={diffYColumn}
-                  displayMode={diffDisplayMode}
-                />
-              ) : (
-                <div className="flex items-center justify-center h-64 text-muted-foreground">
-                  Select base and compare versions to view the diff.
-                </div>
-              )}
-            </CardContent>
-          )}
-        </Card>
-
         {/* Plot cards */}
         <div className="space-y-4">
           {allPlotConfigs.map((cfg) => (
@@ -811,19 +710,32 @@ export default function ProjectPage() {
                 <CardTitle className="text-base">New Plot</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex gap-3">
-                  <Input
-                    placeholder="e.g. Revenue Trend"
-                    value={newPlotName}
-                    onChange={(e) => setNewPlotName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleNewConfig()}
-                    autoFocus
-                    className="flex-1"
-                  />
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-sm">Name</Label>
+                    <Input
+                      placeholder="e.g. Revenue Trend"
+                      value={newPlotName}
+                      onChange={(e) => setNewPlotName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleNewConfig()}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm">Type</Label>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant={newPlotType === "line" ? "default" : "outline"} onClick={() => setNewPlotType("line")}>
+                        Line Chart
+                      </Button>
+                      <Button size="sm" variant={newPlotType === "diff_line" ? "default" : "outline"} onClick={() => setNewPlotType("diff_line")}>
+                        Diff Chart
+                      </Button>
+                    </div>
+                  </div>
                   <Button onClick={handleNewConfig} disabled={!newPlotName.trim() || creatingPlot}>
                     {creatingPlot ? "Creating..." : "Create"}
                   </Button>
-                  <Button variant="outline" onClick={() => { setShowAddPlot(false); setNewPlotName(""); }}>
+                  <Button variant="outline" onClick={() => { setShowAddPlot(false); setNewPlotName(""); setNewPlotType("line"); }}>
                     Cancel
                   </Button>
                 </div>

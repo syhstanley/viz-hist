@@ -6,9 +6,22 @@ const client = axios.create({
 
 // ── Types ──
 
+export interface Folder {
+  id: number;
+  name: string;
+  parent_id: number | null;
+  created_at: string;
+}
+
+export interface FolderTree extends Folder {
+  children: FolderTree[];
+  projects: Project[];
+}
+
 export interface Project {
   id: number;
   name: string;
+  folder_id: number | null;
   created_at: string;
   updated_at: string;
   version_count: number;
@@ -53,9 +66,11 @@ export interface PlotConfig {
   id: number;
   project_id: number;
   name: string;
+  chart_type: string;
   x_column: string | null;
   color_column: string | null;
   tooltip_columns: string[] | null;
+  metadata_json: Record<string, unknown> | null;
   is_default: boolean;
   lines: PlotLine[];
   created_at: string;
@@ -74,23 +89,30 @@ export interface PlotLineCreate {
 
 export interface PlotConfigCreate {
   name?: string;
+  chart_type?: string;
   x_column?: string;
   color_column?: string;
   tooltip_columns?: string[];
+  metadata_json?: Record<string, unknown>;
   lines?: PlotLineCreate[];
 }
 
 export interface PlotConfigUpdate {
   name?: string;
+  chart_type?: string;
   x_column?: string;
   color_column?: string;
   tooltip_columns?: string[];
-  lines?: PlotLineCreate[];  // full replacement
+  metadata_json?: Record<string, unknown>;
+  lines?: PlotLineCreate[];
 }
 
 export interface VersionData {
   columns: string[];
   rows: Record<string, number | string>[];
+  total?: number;
+  offset?: number;
+  limit?: number;
 }
 
 export interface DiffResult {
@@ -102,6 +124,41 @@ export interface DiffResult {
   diff_pct: Record<string, number | string>[];
 }
 
+// ── Folders ──
+
+export async function getFolders(): Promise<Folder[]> {
+  const res = await client.get<Folder[]>("/folders");
+  return res.data;
+}
+
+export async function getFolderTree(): Promise<FolderTree[]> {
+  const res = await client.get<FolderTree[]>("/folders/tree");
+  return res.data;
+}
+
+export async function createFolder(
+  name: string,
+  parentId?: number | null
+): Promise<Folder> {
+  const res = await client.post<Folder>("/folders", {
+    name,
+    parent_id: parentId ?? null,
+  });
+  return res.data;
+}
+
+export async function updateFolder(
+  folderId: number,
+  data: { name?: string; parent_id?: number | null }
+): Promise<Folder> {
+  const res = await client.patch<Folder>(`/folders/${folderId}`, data);
+  return res.data;
+}
+
+export async function deleteFolder(folderId: number): Promise<void> {
+  await client.delete(`/folders/${folderId}`);
+}
+
 // ── Projects ──
 
 export async function getProjects(): Promise<Project[]> {
@@ -109,13 +166,27 @@ export async function getProjects(): Promise<Project[]> {
   return res.data;
 }
 
-export async function createProject(name: string): Promise<Project> {
-  const res = await client.post<Project>("/projects", { name });
+export async function createProject(
+  name: string,
+  folderId?: number | null
+): Promise<Project> {
+  const res = await client.post<Project>("/projects", {
+    name,
+    folder_id: folderId ?? null,
+  });
   return res.data;
 }
 
 export async function getProject(id: number): Promise<ProjectDetail> {
   const res = await client.get<ProjectDetail>(`/projects/${id}`);
+  return res.data;
+}
+
+export async function updateProject(
+  id: number,
+  data: { name?: string; folder_id?: number | null }
+): Promise<Project> {
+  const res = await client.patch<Project>(`/projects/${id}`, data);
   return res.data;
 }
 

@@ -22,13 +22,14 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 @router.post("", response_model=ProjectResponse)
 async def create_project(body: ProjectCreate, db: AsyncSession = Depends(get_db)):
-    project = Project(name=body.name)
+    project = Project(name=body.name, folder_id=body.folder_id)
     db.add(project)
     await db.commit()
     await db.refresh(project)
     return ProjectResponse(
         id=project.id,
         name=project.name,
+        folder_id=project.folder_id,
         created_at=project.created_at,
         updated_at=project.updated_at,
         version_count=0,
@@ -97,6 +98,8 @@ async def update_project(
         raise HTTPException(status_code=404, detail="Project not found")
     if body.name is not None:
         project.name = body.name
+    if "folder_id" in body.model_fields_set:
+        project.folder_id = body.folder_id
     db.add(project)
     await db.commit()
     await db.refresh(project)

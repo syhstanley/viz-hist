@@ -1,22 +1,51 @@
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict
+
+
+# ── Folder ──
+
+class FolderCreate(BaseModel):
+    name: str
+    parent_id: Optional[int] = None
+
+
+class FolderUpdate(BaseModel):
+    name: Optional[str] = None
+    parent_id: Optional[int] = None  # move to another folder
+
+
+class FolderResponse(BaseModel):
+    id: int
+    name: str
+    parent_id: Optional[int]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FolderTreeResponse(FolderResponse):
+    children: List["FolderTreeResponse"] = []
+    projects: List["ProjectResponse"] = []
 
 
 # ── Project ──
 
 class ProjectCreate(BaseModel):
     name: str
+    folder_id: Optional[int] = None
 
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
+    folder_id: Optional[int] = None  # move to folder (null = root)
 
 
 class ProjectResponse(BaseModel):
     id: int
     name: str
+    folder_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     version_count: int = 0
@@ -104,27 +133,33 @@ class PlotLineResponse(BaseModel):
 
 class PlotConfigCreate(BaseModel):
     name: str = "Default"
+    chart_type: str = "line"  # "line", "diff_line"
     x_column: Optional[str] = None
     color_column: Optional[str] = None
     tooltip_columns: Optional[List[str]] = None
+    metadata_json: Optional[Dict[str, Any]] = None
     lines: List[PlotLineCreate] = []
 
 
 class PlotConfigUpdate(BaseModel):
     name: Optional[str] = None
+    chart_type: Optional[str] = None
     x_column: Optional[str] = None
     color_column: Optional[str] = None
     tooltip_columns: Optional[List[str]] = None
-    lines: Optional[List[PlotLineCreate]] = None  # full replacement when provided
+    metadata_json: Optional[Dict[str, Any]] = None
+    lines: Optional[List[PlotLineCreate]] = None
 
 
 class PlotConfigResponse(BaseModel):
     id: int
     project_id: int
     name: str
+    chart_type: str
     x_column: Optional[str]
     color_column: Optional[str]
     tooltip_columns: Optional[List[str]]
+    metadata_json: Optional[Dict[str, Any]]
     is_default: bool
     lines: List[PlotLineResponse] = []
     created_at: datetime

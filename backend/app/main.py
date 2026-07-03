@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-from app.routers import projects, versions, plots
+from app.routers import folders, projects, versions, plots
 
 
 @asynccontextmanager
@@ -26,6 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(folders.router)
 app.include_router(projects.router)
 app.include_router(versions.router)
 app.include_router(plots.router)
