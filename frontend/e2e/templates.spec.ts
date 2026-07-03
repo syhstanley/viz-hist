@@ -35,8 +35,12 @@ test.describe("templates admin page", () => {
     await page.goto("/templates");
     await expect(page.getByRole("heading", { name: "Chart Templates" })).toBeVisible();
 
-    // Create a new template
-    await page.locator("button:has(svg.lucide-plus)").first().click();
+    // AI prompt section is present with a copy button
+    await expect(page.getByText("Generate a template with AI")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Copy prompt" })).toBeVisible();
+
+    // Create a new template -> editor overlay opens
+    await page.getByRole("button", { name: "New Template" }).click();
     await page.getByPlaceholder("template-id").fill(TEMPLATE_ID);
     await page.getByPlaceholder("template-id").press("Enter");
     await expect(page.getByText(`${TEMPLATE_ID}.js`, { exact: true })).toBeVisible();
@@ -79,7 +83,7 @@ test.describe("templates admin page", () => {
   test("broken template code shows error instead of crashing the page", async ({ page }) => {
     await page.goto("/templates");
 
-    await page.locator("button:has(svg.lucide-plus)").first().click();
+    await page.getByRole("button", { name: "New Template" }).click();
     await page.getByPlaceholder("template-id").fill(TEMPLATE_ID);
     await page.getByPlaceholder("template-id").press("Enter");
     await expect(page.getByText(`${TEMPLATE_ID}.js`, { exact: true })).toBeVisible();
@@ -99,7 +103,12 @@ test.describe("templates admin page", () => {
     });
     await expect(page.getByText(/boom-e2e/).first()).toBeVisible();
 
-    // The rest of the page is still functional
+    // The editor overlay is still alive and functional
+    await expect(page.getByText(`${TEMPLATE_ID}.js`, { exact: true })).toBeVisible();
+
+    // Close the overlay (accept the unsaved-changes confirm) -> page intact
+    page.on("dialog", (d) => d.accept());
+    await page.keyboard.press("Escape");
     await expect(page.getByRole("heading", { name: "Chart Templates" })).toBeVisible();
   });
 });

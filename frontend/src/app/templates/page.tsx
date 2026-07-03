@@ -15,6 +15,7 @@ import {
   type TemplateVersionData,
 } from "@/lib/templates";
 import { parseCSV } from "@/lib/csv";
+import { AI_TEMPLATE_PROMPT } from "@/lib/templatePrompt";
 import {
   ParamControl,
   TemplateError,
@@ -24,12 +25,17 @@ import PlotlyChart from "@/components/PlotlyChart";
 import { useDarkMode } from "@/lib/useDarkMode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   ArrowLeft, Plus, Save, Trash2, Check, AlertTriangle, FileCode,
-  FileSpreadsheet, Eye, X,
+  FileSpreadsheet, Eye, X, Pencil, Copy, Bot, ChevronDown, ChevronRight,
 } from "lucide-react";
 import type { PlotParams } from "react-plotly.js";
 
@@ -74,6 +80,8 @@ export default function TemplatesPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [copied, setCopied] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = (msg: string) => {
@@ -92,10 +100,18 @@ export default function TemplatesPage() {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const select = (t: TemplateFile) => {
-    if (dirty && !confirm("Discard unsaved changes?")) return;
+  const openEditor = (t: TemplateFile) => {
     setSelectedId(t.id);
     setCode(t.code);
+    setDirty(false);
+    setSamples([]);
+    setPreviewParams({});
+  };
+
+  const closeEditor = () => {
+    if (dirty && !confirm("Discard unsaved changes?")) return;
+    setSelectedId(null);
+    setCode("");
     setDirty(false);
   };
 
@@ -177,13 +193,11 @@ export default function TemplatesPage() {
       return;
     }
     try {
-      await saveTemplate(id, STARTER_CODE);
+      const created = await saveTemplate(id, STARTER_CODE);
       setNewId("");
       setCreating(false);
       await refresh();
-      setSelectedId(id);
-      setCode(STARTER_CODE);
-      setDirty(false);
+      openEditor(created);
       showToast(`Template "${id}" created`);
     } catch {
       setError("Failed to create template.");
@@ -206,9 +220,19 @@ export default function TemplatesPage() {
     }
   };
 
+  const handleCopyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(AI_TEMPLATE_PROMPT);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Failed to copy — select the text manually.");
+    }
+  };
+
   return (
     <main className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="mb-6">
           <Link href="/">
             <Button variant="ghost" size="sm" className="mb-2 -ml-2 text-muted-foreground">
@@ -230,194 +254,250 @@ export default function TemplatesPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6">
-          {/* Template list */}
-          <Card className="h-fit">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Templates</CardTitle>
-                <Button size="sm" variant="outline" onClick={() => setCreating(true)}>
-                  <Plus className="h-3.5 w-3.5" />
+        {/* ── AI prompt: hand this to your assistant to generate a template ── */}
+        <Card className="mb-6">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <button
+                className="flex items-center gap-2 text-left"
+                onClick={() => setShowPrompt((v) => !v)}
+              >
+                {showPrompt
+                  ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                <Bot className="h-4 w-4" />
+                <CardTitle className="text-base">Generate a template with AI</CardTitle>
+              </button>
+              <Button size="sm" variant="outline" onClick={handleCopyPrompt}>
+                {copied ? (
+                  <><Check className="mr-1.5 h-3.5 w-3.5" />Copied</>
+                ) : (
+                  <><Copy className="mr-1.5 h-3.5 w-3.5" />Copy prompt</>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground pl-6">
+              Copy this prompt into ChatGPT / Claude / any assistant, describe the chart you want and
+              paste a few sample CSV rows — it returns code you can paste straight into a new template.
+            </p>
+          </CardHeader>
+          {showPrompt && (
+            <CardContent>
+              <pre className="rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap max-h-96 overflow-auto">
+                {AI_TEMPLATE_PROMPT}
+              </pre>
+            </CardContent>
+          )}
+        </Card>
+
+        {/* ── Template management ── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Templates</CardTitle>
+              {!creating && (
+                <Button size="sm" onClick={() => setCreating(true)}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  New Template
+                </Button>
+              )}
+            </div>
+            {creating && (
+              <div className="flex gap-2 pt-2">
+                <Input
+                  placeholder="template-id"
+                  value={newId}
+                  onChange={(e) => setNewId(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreate();
+                    if (e.key === "Escape") { setCreating(false); setNewId(""); }
+                  }}
+                  className="h-9 max-w-xs font-mono"
+                  autoFocus
+                />
+                <Button size="sm" className="h-9" onClick={handleCreate} disabled={!newId.trim()}>
+                  <Check className="mr-1 h-3.5 w-3.5" />
+                  Create
+                </Button>
+                <Button size="sm" variant="outline" className="h-9" onClick={() => { setCreating(false); setNewId(""); }}>
+                  Cancel
                 </Button>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              {creating && (
-                <div className="flex gap-1.5 pb-2">
-                  <Input
-                    placeholder="template-id"
-                    value={newId}
-                    onChange={(e) => setNewId(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleCreate();
-                      if (e.key === "Escape") { setCreating(false); setNewId(""); }
-                    }}
-                    className="h-8 text-sm font-mono"
-                    autoFocus
-                  />
-                  <Button size="sm" className="h-8" onClick={handleCreate} disabled={!newId.trim()}>
-                    <Check className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              )}
-              {templates.length === 0 && !creating ? (
-                <p className="text-sm text-muted-foreground py-2">
-                  No templates yet. Create one to get started.
-                </p>
-              ) : (
-                templates.map((t) => (
-                  <div
-                    key={t.id}
-                    className={`flex items-center justify-between rounded-md px-2 py-1.5 cursor-pointer text-sm ${
-                      selectedId === t.id ? "bg-accent" : "hover:bg-accent/50"
-                    }`}
-                    onClick={() => select(t)}
-                  >
-                    <span className="flex items-center gap-1.5 font-mono">
-                      <FileCode className="h-3.5 w-3.5 text-muted-foreground" />
-                      {t.id}
-                    </span>
-                    <Button
-                      variant="ghost" size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                      onClick={(e) => { e.stopPropagation(); handleDelete(t.id); }}
+            )}
+          </CardHeader>
+          <CardContent>
+            {templates.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No templates yet. Create one, or ask your AI with the prompt above.
+              </p>
+            ) : (
+              <div className="rounded-md border divide-y">
+                {templates.map((t) => {
+                  const compiled = compileTemplate(t.code);
+                  return (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between px-3 py-2.5 hover:bg-accent/50 cursor-pointer"
+                      onClick={() => openEditor(t)}
                     >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileCode className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="font-mono text-sm">{t.id}</span>
+                        {compiled.ok ? (
+                          <span className="text-sm text-muted-foreground truncate">
+                            {compiled.template.name}
+                            {compiled.template.description ? ` — ${compiled.template.description}` : ""}
+                          </span>
+                        ) : (
+                          <Badge variant="destructive" className="text-xs">
+                            <AlertTriangle className="mr-1 h-3 w-3" />
+                            Invalid
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"
+                          title="Edit"
+                          onClick={(e) => { e.stopPropagation(); openEditor(t); }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          title="Delete"
+                          onClick={(e) => { e.stopPropagation(); handleDelete(t.id); }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-          {/* Editor + Preview */}
-          <div className="space-y-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-base font-mono">
-                    {selectedId ? `${selectedId}.js` : "Select a template"}
-                  </CardTitle>
-                  {selectedId && (
-                    compileStatus.ok ? (
-                      <Badge variant="secondary" className="text-xs">
-                        <Check className="mr-1 h-3 w-3" />
-                        Valid
-                      </Badge>
-                    ) : (
-                      <Badge variant="destructive" className="text-xs">
-                        <AlertTriangle className="mr-1 h-3 w-3" />
-                        Invalid
-                      </Badge>
-                    )
-                  )}
-                </div>
-                {selectedId && (
-                  <Button size="sm" onClick={handleSave} disabled={!dirty || saving}>
-                    {saving ? "Saving..." : (<><Save className="mr-1.5 h-3.5 w-3.5" />Save</>)}
-                  </Button>
+      {/* ── Editor + Preview overlay ── */}
+      <Dialog open={selectedId !== null} onOpenChange={(open) => { if (!open) closeEditor(); }}>
+        <DialogContent
+          className="sm:max-w-[96vw] 2xl:max-w-[1600px] max-h-[94vh] overflow-y-auto"
+          showCloseButton
+        >
+          <DialogHeader>
+            <div className="flex items-center justify-between pr-8">
+              <div className="flex items-center gap-2">
+                <DialogTitle className="font-mono text-base">
+                  {selectedId ? `${selectedId}.js` : ""}
+                </DialogTitle>
+                {compileStatus.ok ? (
+                  <Badge variant="secondary" className="text-xs">
+                    <Check className="mr-1 h-3 w-3" />
+                    Valid
+                  </Badge>
+                ) : (
+                  <Badge variant="destructive" className="text-xs">
+                    <AlertTriangle className="mr-1 h-3 w-3" />
+                    Invalid
+                  </Badge>
                 )}
               </div>
-              {selectedId && !compileStatus.ok && (
-                <p className="text-xs text-destructive font-mono pt-1">{compileStatus.error}</p>
-              )}
-            </CardHeader>
-            <CardContent>
-              {selectedId ? (
-                <div className="space-y-2">
-                  <Label className="sr-only">Template code</Label>
-                  <textarea
-                    value={code}
-                    onChange={(e) => { setCode(e.target.value); setDirty(true); }}
-                    spellCheck={false}
-                    className="w-full h-[560px] rounded-md border bg-muted/30 p-3 font-mono text-sm leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Saved files live in <code>templates/{selectedId}.js</code>. Remember to commit to git.
-                    Saving with errors is allowed — the affected chart shows the error instead of crashing.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
-                  Select a template on the left, or create a new one.
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              <Button size="sm" onClick={handleSave} disabled={!dirty || saving}>
+                {saving ? "Saving..." : (<><Save className="mr-1.5 h-3.5 w-3.5" />Save</>)}
+              </Button>
+            </div>
+            {!compileStatus.ok && (
+              <p className="text-xs text-destructive font-mono">{compileStatus.error}</p>
+            )}
+          </DialogHeader>
 
-          {/* ── Live Preview ── */}
-          {selectedId && (
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Eye className="h-4 w-4" />
-                    Preview
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="sample-csv-upload"
-                      type="file"
-                      accept=".csv"
-                      multiple
-                      onChange={(e) => {
-                        void handleAddSamples(e.target.files);
-                        e.target.value = "";
-                      }}
-                      className="hidden"
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => document.getElementById("sample-csv-upload")?.click()}
-                    >
-                      <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
-                      Add sample CSV
-                    </Button>
-                  </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Editor */}
+            <div className="space-y-2">
+              <textarea
+                value={code}
+                onChange={(e) => { setCode(e.target.value); setDirty(true); }}
+                spellCheck={false}
+                className="w-full h-[70vh] rounded-md border bg-muted/30 p-3 font-mono text-sm leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="text-xs text-muted-foreground">
+                Saved to <code>templates/{selectedId}.js</code>. Remember to commit to git.
+                Saving with errors is allowed — the affected chart shows the error instead of crashing.
+              </p>
+            </div>
+
+            {/* Preview */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Eye className="h-4 w-4" />
+                  Preview
+                </span>
+                <div>
+                  <Input
+                    id="sample-csv-upload"
+                    type="file"
+                    accept=".csv"
+                    multiple
+                    onChange={(e) => {
+                      void handleAddSamples(e.target.files);
+                      e.target.value = "";
+                    }}
+                    className="hidden"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => document.getElementById("sample-csv-upload")?.click()}
+                  >
+                    <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                    Add sample CSV
+                  </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Sample CSVs live only in this page — nothing is uploaded. Each file acts as one
-                  version passed to <code>render(ctx)</code>, using the unsaved code in the editor.
-                </p>
-                {samples.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {samples.map((s) => (
-                      <Badge key={s.id} variant="secondary" className="gap-1 font-mono text-xs">
-                        {s.label}
-                        <span className="text-muted-foreground">({s.rows.length} rows)</span>
-                        <button
-                          onClick={() => removeSample(s.id)}
-                          className="ml-0.5 hover:text-destructive"
-                          title="Remove sample"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-                {compileStatus.ok && compileStatus.template.params.length > 0 && samples.length > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
-                    {compileStatus.template.params.map((def) => (
-                      <ParamControl
-                        key={def.key}
-                        def={def}
-                        value={previewParams[def.key]}
-                        versions={samples}
-                        columns={sampleColumns}
-                        onChange={(v) => setPreviewParams((prev) => ({ ...prev, [def.key]: v }))}
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardHeader>
-              <CardContent>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Sample CSVs live only in this page — nothing is uploaded. Each file acts as one
+                version passed to <code>render(ctx)</code>, using the unsaved code in the editor.
+              </p>
+              {samples.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {samples.map((s) => (
+                    <Badge key={s.id} variant="secondary" className="gap-1 font-mono text-xs">
+                      {s.label}
+                      <span className="text-muted-foreground">({s.rows.length} rows)</span>
+                      <button
+                        onClick={() => removeSample(s.id)}
+                        className="ml-0.5 hover:text-destructive"
+                        title="Remove sample"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              {compileStatus.ok && compileStatus.template.params.length > 0 && samples.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {compileStatus.template.params.map((def) => (
+                    <ParamControl
+                      key={def.key}
+                      def={def}
+                      value={previewParams[def.key]}
+                      versions={samples}
+                      columns={sampleColumns}
+                      onChange={(v) => setPreviewParams((prev) => ({ ...prev, [def.key]: v }))}
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="rounded-md border p-2 min-h-[300px]">
                 {!compileStatus.ok ? (
                   <TemplateError error={compileStatus.error} />
                 ) : samples.length === 0 ? (
-                  <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
+                  <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
                     Add one or more sample CSV files to preview this template.
                   </div>
                 ) : !previewResult ? null : !previewResult.ok ? (
@@ -436,17 +516,16 @@ export default function TemplatesPage() {
                         ...(previewResult.figure.layout || {}),
                       } as PlotParams["layout"]}
                       useResizeHandler
-                      style={{ width: "100%", height: "400px" }}
+                      style={{ width: "100%", height: "55vh" }}
                       config={{ displaylogo: false }}
                     />
                   </ChartErrorBoundary>
                 )}
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
 
       {toast && (
         <div className="fixed bottom-4 left-4 z-50 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 shadow-lg dark:border-green-800 dark:bg-green-950 dark:text-green-200">
