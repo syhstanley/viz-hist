@@ -15,6 +15,8 @@ export interface TraceLine {
   data: Record<string, number | string>[];
   yColumn: string;
   color: string;
+  axis?: "left" | "right";
+  scalar?: number;
 }
 
 interface ChartOverlayProps {
@@ -45,47 +47,56 @@ function buildHoverTemplate(
   yCol: string,
   tooltipColumns: string[],
   dataRow: (idx: number) => Record<string, number | string>,
-  dataLen: number
+  dataLen: number,
+  allPlottedYCols: string[] = [],
+  scalar: number = 1.0
 ): { hovertemplate: string; customdata?: (string | number)[][] } {
   const parts: string[] = [];
+  const hasScale = scalar !== 1.0;
 
   // If no tooltip columns selected, disable tooltip entirely
   if (tooltipColumns.length === 0) {
     return { hovertemplate: "<extra></extra>" };
   }
 
-  // Show y value only if it's in tooltipColumns
-  if (tooltipColumns.includes(yCol)) {
+  // Extra columns: anything in tooltipColumns that isn't x, own y, or another plotted y column
+  const excludeSet = new Set([xColumn, yCol, ...allPlottedYCols]);
+  const extraCols = tooltipColumns.filter((c) => !excludeSet.has(c));
+
+  // customdata layout: [originalY (if scaled), ...extraCols]
+  const customdata: (string | number)[][] = [];
+  const customOffset = hasScale ? 1 : 0; // slot 0 = original Y when scaled
+
+  for (let i = 0; i < dataLen; i++) {
+    const row = dataRow(i);
+    const cd: (string | number)[] = [];
+    if (hasScale) cd.push(Number(row[yCol]));
+    cd.push(...extraCols.map((c) => row[c] as string | number));
+    customdata.push(cd);
+  }
+
+  // Show original value first, then scaled value
+  if (hasScale) {
+    parts.push(`<b>${yCol}</b>: %{customdata[0]} (×${scalar} = %{y})`);
+  } else {
     parts.push(`<b>${yCol}</b>: %{y}`);
   }
 
-  // Show x column only if it's in tooltipColumns
+  // Show x column if it's in tooltipColumns
   if (tooltipColumns.includes(xColumn)) {
     parts.push(`${xColumn}: %{x}`);
   }
 
-  // Extra columns: anything in tooltipColumns that isn't x or y
-  const extraCols = tooltipColumns.filter((c) => c !== xColumn && c !== yCol);
-
-  if (extraCols.length === 0) {
-    return { hovertemplate: parts.join("<br>") + "<extra></extra>" };
+  if (extraCols.length > 0) {
+    const extraLines = extraCols
+      .map((c, i) => `${c}: %{customdata[${i + customOffset}]}`)
+      .join("<br>");
+    parts.push(extraLines);
   }
-
-  const customdata: (string | number)[][] = [];
-  for (let i = 0; i < dataLen; i++) {
-    const row = dataRow(i);
-    customdata.push(extraCols.map((c) => row[c] as string | number));
-  }
-
-  const extraLines = extraCols
-    .map((c, i) => `${c}: %{customdata[${i}]}`)
-    .join("<br>");
-
-  parts.push(extraLines);
 
   return {
     hovertemplate: parts.join("<br>") + "<extra></extra>",
-    customdata,
+    customdata: customdata.length > 0 ? customdata : undefined,
   };
 }
 
@@ -107,44 +118,66 @@ export default function ChartOverlay({
       );
     }
 
+    const hasRightAxis = lines.some((l) => l.axis === "right");
+    const allPlottedYCols = [...new Set(lines.map((l) => l.yColumn))];
+
     const traces: Plotly.Data[] = lines.map((line) => {
+      const s = line.scalar ?? 1.0;
+      const isRight = line.axis === "right";
       const x = line.data.map((r) => r[xColumn]);
-      const y = line.data.map((r) => Number(r[line.yColumn]));
+      const y = line.data.map((r) => Number(r[line.yColumn]) * s);
       const hover = buildHoverTemplate(
         xColumn,
         line.yColumn,
         tooltipColumns,
         (i) => line.data[i],
-        line.data.length
+        line.data.length,
+        allPlottedYCols,
+        s
       );
+      const scaleSuffix = s !== 1.0 ? ` ×${s}` : "";
       return {
         x,
         y,
         type: "scatter" as const,
         mode: "lines+markers" as const,
-        name: line.label,
+        name: line.label + scaleSuffix,
         marker: { color: line.color, size: 4 },
         line: { width: 2 },
+        yaxis: isRight ? "y2" : "y",
         ...hover,
       };
     });
 
-    const allYCols = [...new Set(lines.map((l) => l.yColumn))];
+    const leftCols = [...new Set(lines.filter((l) => l.axis !== "right").map((l) => l.yColumn))];
+    const rightCols = [...new Set(lines.filter((l) => l.axis === "right").map((l) => l.yColumn))];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const layout: any = {
+      font: CHART_FONT,
+      autosize: true,
+      height: 500,
+      margin: { t: 30, r: hasRightAxis ? 80 : 30, b: 60, l: 60 },
+      xaxis: { title: { text: xColumn }, automargin: true },
+      yaxis: { title: { text: leftCols.join(", ") }, automargin: true },
+      hovermode: tooltipColumns.length === 0 ? false : "x unified",
+      legend: { orientation: "h", y: -0.2 },
+      dragmode: "zoom",
+    };
+
+    if (hasRightAxis) {
+      layout.yaxis2 = {
+        title: { text: rightCols.join(", ") },
+        overlaying: "y",
+        side: "right",
+        automargin: true,
+      };
+    }
 
     return (
       <Plot
         data={traces}
-        layout={{
-          font: CHART_FONT,
-          autosize: true,
-          height: 500,
-          margin: { t: 30, r: 30, b: 60, l: 60 },
-          xaxis: { title: { text: xColumn }, automargin: true },
-          yaxis: { title: { text: allYCols.join(", ") }, automargin: true },
-          hovermode: tooltipColumns.length === 0 ? false : "x unified",
-          legend: { orientation: "h", y: -0.2 },
-          dragmode: "zoom",
-        }}
+        layout={layout}
         config={{
           responsive: true,
           displayModeBar: true,

@@ -87,6 +87,8 @@ async def create_plot_config(
             color=line_data.color,
             enabled=line_data.enabled,
             sort_order=line_data.sort_order if line_data.sort_order else i,
+            axis=line_data.axis,
+            scalar=line_data.scalar,
         )
         db.add(line)
 

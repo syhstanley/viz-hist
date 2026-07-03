@@ -41,12 +41,17 @@ import {
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   ArrowLeft,
   Upload,
   Save,
   Database,
-  LineChart,
-  GitCompare,
   Check,
   X,
   Plus,
@@ -55,6 +60,7 @@ import {
   EyeOff,
   Pencil,
   FileSpreadsheet,
+  Settings,
 } from "lucide-react";
 
 const COLORS = [
@@ -62,7 +68,7 @@ const COLORS = [
   "#8b5cf6", "#ec4899", "#06b6d4", "#f97316",
 ];
 
-type Panel = "none" | "project" | "plot" | "diff";
+// No more panel system — everything is dialog or inline
 
 // Local UI state for a plot line
 interface UIPlotLine {
@@ -74,6 +80,8 @@ interface UIPlotLine {
   color: string;
   enabled: boolean;
   sortOrder: number;
+  axis: "left" | "right";
+  scalar: number;
 }
 
 export default function ProjectPage() {
@@ -82,9 +90,10 @@ export default function ProjectPage() {
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
-  const [activePanel, setActivePanel] = useState<Panel>("none");
+  const [showProjectConfig, setShowProjectConfig] = useState(false);
 
   // Plot config
+  const [showPlotConfig, setShowPlotConfig] = useState(false);
   const [plotConfigId, setPlotConfigId] = useState<number | null>(null);
   const [plotLines, setPlotLines] = useState<UIPlotLine[]>([]);
   const [versionDataMap, setVersionDataMap] = useState<Map<number, Record<string, number | string>[]>>(new Map());
@@ -122,6 +131,8 @@ export default function ProjectPage() {
   const configInitialized = useRef(false);
 
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Derived
   const selectableYColumns = useMemo(() => {
@@ -130,9 +141,10 @@ export default function ProjectPage() {
 
   const enabledLines = useMemo(() => plotLines.filter((l) => l.enabled), [plotLines]);
 
-  // Track config dirty
+  // Track config dirty (skip during save to avoid false triggers from dbId sync)
+  const savingRef = useRef(false);
   useEffect(() => {
-    if (configInitialized.current) setConfigDirty(true);
+    if (configInitialized.current && !savingRef.current) setConfigDirty(true);
   }, [xColumn, colorColumn, tooltipColumns, plotLines]);
 
   // ── Fetch project (with versions + default plot config) ──
@@ -175,6 +187,8 @@ export default function ProjectPage() {
                   color: pl.color || COLORS[idx % COLORS.length],
                   enabled: pl.enabled,
                   sortOrder: pl.sort_order,
+                  axis: (pl.axis === "right" ? "right" : "left") as "left" | "right",
+                  scalar: pl.scalar ?? 1.0,
                 };
               }));
             }
@@ -231,6 +245,8 @@ export default function ProjectPage() {
         data: versionDataMap.get(l.versionId)!,
         yColumn: l.yColumn,
         color: l.color,
+        axis: l.axis,
+        scalar: l.scalar,
       }));
   }, [enabledLines, versionDataMap]);
 
@@ -279,6 +295,7 @@ export default function ProjectPage() {
   const handleSaveConfig = async () => {
     try {
       setSaving(true);
+      savingRef.current = true;
       const payload = {
         name: "Default",
         x_column: xColumn || undefined,
@@ -290,6 +307,8 @@ export default function ProjectPage() {
           color: l.color,
           enabled: l.enabled,
           sort_order: i,
+          axis: l.axis,
+          scalar: l.scalar,
         })),
       };
 
@@ -314,7 +333,9 @@ export default function ProjectPage() {
         );
       }
       setConfigDirty(false);
-    } catch { setError("Failed to save plot config."); } finally { setSaving(false); }
+      setShowPlotConfig(false);
+      showToast("Plot config saved");
+    } catch { setError("Failed to save plot config."); } finally { setSaving(false); savingRef.current = false; }
   };
 
   const addLine = () => {
@@ -334,10 +355,18 @@ export default function ProjectPage() {
         color: COLORS[prev.length % COLORS.length],
         enabled: true,
         sortOrder: prev.length,
+        axis: "left",
+        scalar: 1.0,
       },
     ]);
     setAddLineVersion("");
     setAddLineColumn("");
+  };
+
+  const showToast = (msg: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(msg);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
   };
 
   const removeLine = (id: string) => {
@@ -356,15 +385,11 @@ export default function ProjectPage() {
     );
   };
 
-  const togglePanel = (panel: Panel) => {
-    setActivePanel((prev) => (prev === panel ? "none" : panel));
-  };
-
   return (
     <main className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="flex items-start justify-between mb-6">
+        <div className="flex items-center justify-between mb-6">
           <div>
             <Link href="/">
               <Button variant="ghost" size="sm" className="mb-2 -ml-2 text-muted-foreground">
@@ -376,20 +401,9 @@ export default function ProjectPage() {
               {project?.name || "Loading..."}
             </h1>
           </div>
-          <div className="flex items-center gap-2 mt-2">
-            <Button variant={activePanel === "project" ? "default" : "outline"} size="sm" onClick={() => togglePanel("project")}>
-              <Database className="mr-1.5 h-4 w-4" />
-              Project
-            </Button>
-            <Button variant={activePanel === "plot" ? "default" : "outline"} size="sm" onClick={() => togglePanel("plot")}>
-              <LineChart className="mr-1.5 h-4 w-4" />
-              Plot
-            </Button>
-            <Button variant={activePanel === "diff" ? "default" : "outline"} size="sm" onClick={() => togglePanel("diff")}>
-              <GitCompare className="mr-1.5 h-4 w-4" />
-              Diff
-            </Button>
-          </div>
+          <Button variant="outline" size="icon" onClick={() => setShowProjectConfig(true)} title="Project Settings">
+            <Database className="h-4 w-4" />
+          </Button>
         </div>
 
         {/* Error */}
@@ -400,297 +414,249 @@ export default function ProjectPage() {
           </div>
         )}
 
-        {/* ── Project Config Panel ── */}
-        {activePanel === "project" && (
-          <Card className="mb-6">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Project Config</CardTitle>
-                <Button variant="ghost" size="icon" onClick={() => setActivePanel("none")}><X className="h-4 w-4" /></Button>
+        {/* ── Project Config Dialog ── */}
+        <Dialog open={showProjectConfig} onOpenChange={setShowProjectConfig}>
+          <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Project Settings</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <h3 className="text-base font-medium flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  Upload Data Source
+                </h3>
+                <Input id="csv-upload" type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" />
+                <Input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Version label (e.g. v1.0)" />
+                <Button onClick={handleUpload} disabled={!file || !label.trim() || uploading} className="w-full" size="sm">
+                  {uploading ? "Uploading..." : "Upload"}
+                </Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <h3 className="text-base font-medium flex items-center gap-2">
-                    <Upload className="h-4 w-4" />
-                    Upload Data Source
-                  </h3>
-                  <Input id="csv-upload" type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" />
-                  <Input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Version label (e.g. v1.0)" />
-                  <Button onClick={handleUpload} disabled={!file || !label.trim() || uploading} className="w-full" size="sm">
-                    {uploading ? "Uploading..." : "Upload"}
-                  </Button>
+              <div className="space-y-3">
+                <h3 className="text-base font-medium">Data Sources</h3>
+                {versions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No data sources yet. Upload a CSV to get started.</p>
+                ) : (
+                  <div className="rounded-md border">
+                    <table className="w-full text-base">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source File</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Label</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Rows</th>
+                          <th className="px-3 py-2 text-right font-medium text-muted-foreground w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {versions.map((v) => {
+                          const isEditing = editingVersionId === v.id;
+                          return (
+                            <tr key={v.id} className="border-b last:border-0">
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-1.5">
+                                  <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  <span className="text-muted-foreground">{v.original_filename}</span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2">
+                                {isEditing ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <Input
+                                      value={editLabelValue}
+                                      onChange={(e) => setEditLabelValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") handleUpdateLabel(v.id);
+                                        if (e.key === "Escape") { setEditingVersionId(null); setEditLabelValue(""); }
+                                      }}
+                                      className="h-7 text-sm"
+                                      autoFocus
+                                    />
+                                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleUpdateLabel(v.id)}>
+                                      <Check className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => { setEditingVersionId(null); setEditLabelValue(""); }}>
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <span className="font-medium">{v.label}</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground">{v.row_count ?? "-"}</td>
+                              <td className="px-3 py-2 text-right">
+                                {!isEditing && (
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
+                                    onClick={() => { setEditingVersionId(v.id); setEditLabelValue(v.label); }}>
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Plot Config Dialog ── */}
+        <Dialog open={showPlotConfig} onOpenChange={setShowPlotConfig}>
+          <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Plot Settings</DialogTitle>
+            </DialogHeader>
+            {availableColumns.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Upload a CSV first in Project Config.</p>
+            ) : (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">X Axis</Label>
+                    <Select value={xColumn} onValueChange={(v) => v && setXColumn(v)}>
+                      <SelectTrigger><SelectValue placeholder="Select column" /></SelectTrigger>
+                      <SelectContent>
+                        {availableColumns.map((col) => (<SelectItem key={col} value={col}>{col}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Color (group by)</Label>
+                    <Select value={colorColumn || "__none__"} onValueChange={(v) => setColorColumn(!v || v === "__none__" ? "" : v)}>
+                      <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {availableColumns.filter((c) => c !== xColumn).map((col) => (
+                          <SelectItem key={col} value={col}>{col}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Tooltip Columns</Label>
+                    <ScrollArea className="h-24 rounded-md border p-2">
+                      <div className="space-y-1.5">
+                        {availableColumns.map((col) => (
+                          <label key={col} className="flex items-center space-x-2 cursor-pointer">
+                            <Checkbox checked={tooltipColumns.includes(col)} onCheckedChange={() => toggleTooltipColumn(col)} />
+                            <span className="text-base">{col}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
                 </div>
+
+                <Separator />
+
                 <div className="space-y-3">
-                  <h3 className="text-base font-medium">Data Sources</h3>
-                  {versions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No data sources yet. Upload a CSV to get started.</p>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-medium">Lines</h3>
+                    <Badge variant="secondary">{enabledLines.length} active / {plotLines.length} total</Badge>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-base">Version</Label>
+                      <Select value={addLineVersion} onValueChange={(v) => v && setAddLineVersion(v)}>
+                        <SelectTrigger><SelectValue placeholder="Select version..." /></SelectTrigger>
+                        <SelectContent>
+                          {versions.map((v) => (<SelectItem key={v.id} value={v.id.toString()}>{v.label}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-base">Y Column</Label>
+                      <Select value={addLineColumn} onValueChange={(v) => v && setAddLineColumn(v)}>
+                        <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
+                        <SelectContent>
+                          {selectableYColumns.map((col) => (<SelectItem key={col} value={col}>{col}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button size="sm" onClick={addLine} disabled={!addLineVersion || !addLineColumn}>
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      Add
+                    </Button>
+                  </div>
+
+                  {plotLines.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No lines configured. Add one above.</p>
                   ) : (
                     <div className="rounded-md border">
                       <table className="w-full text-base">
                         <thead>
                           <tr className="border-b bg-muted/50">
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source File</th>
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Label</th>
-                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Rows</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground w-10"></th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Version</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Y Column</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground w-10">Color</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground w-16">Axis</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground w-20">Scale</th>
                             <th className="px-3 py-2 text-right font-medium text-muted-foreground w-10"></th>
                           </tr>
                         </thead>
                         <tbody>
-                          {versions.map((v) => {
-                            const isEditing = editingVersionId === v.id;
-                            return (
-                              <tr key={v.id} className="border-b last:border-0">
-                                <td className="px-3 py-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                    <span className="text-muted-foreground">{v.original_filename}</span>
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2">
-                                  {isEditing ? (
-                                    <div className="flex items-center gap-1.5">
-                                      <Input
-                                        value={editLabelValue}
-                                        onChange={(e) => setEditLabelValue(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") handleUpdateLabel(v.id);
-                                          if (e.key === "Escape") { setEditingVersionId(null); setEditLabelValue(""); }
-                                        }}
-                                        className="h-7 text-sm"
-                                        autoFocus
-                                      />
-                                      <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleUpdateLabel(v.id)}>
-                                        <Check className="h-3.5 w-3.5" />
-                                      </Button>
-                                      <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => { setEditingVersionId(null); setEditLabelValue(""); }}>
-                                        <X className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                    <span className="font-medium">{v.label}</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-muted-foreground">{v.row_count ?? "-"}</td>
-                                <td className="px-3 py-2 text-right">
-                                  {!isEditing && (
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
-                                      onClick={() => { setEditingVersionId(v.id); setEditLabelValue(v.label); }}>
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </Button>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
+                          {plotLines.map((line) => (
+                            <tr key={line.id} className={`border-b last:border-0 ${!line.enabled ? "opacity-40" : ""}`}>
+                              <td className="px-3 py-2">
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleLine(line.id)} title={line.enabled ? "Disable" : "Enable"}>
+                                  {line.enabled ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                                </Button>
+                              </td>
+                              <td className="px-3 py-2">
+                                <Badge variant="outline">{line.versionLabel}</Badge>
+                              </td>
+                              <td className="px-3 py-2 font-mono text-base">{line.yColumn}</td>
+                              <td className="px-3 py-2">
+                                <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: line.color }} />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs font-mono"
+                                  onClick={() => setPlotLines((prev) => prev.map((l) => l.id === line.id ? { ...l, axis: l.axis === "left" ? "right" : "left" } : l))}
+                                  title={line.axis === "left" ? "Left Y axis (click to switch to right)" : "Right Y axis (click to switch to left)"}
+                                >
+                                  {line.axis === "left" ? "L" : "R"}
+                                </Button>
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  type="number"
+                                  step="any"
+                                  value={line.scalar}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    if (!isNaN(val)) setPlotLines((prev) => prev.map((l) => l.id === line.id ? { ...l, scalar: val } : l));
+                                  }}
+                                  className="h-7 w-16 text-xs font-mono px-1.5"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeLine(line.id)}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
                   )}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ── Plot Config Panel ── */}
-        {activePanel === "plot" && (
-          <Card className="mb-6">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Plot Config</CardTitle>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant={configDirty ? "default" : "outline"} onClick={handleSaveConfig} disabled={!configDirty || saving}>
-                    {saving ? "Saving..." : configDirty ? (<><Save className="mr-1.5 h-3.5 w-3.5" />Save</>) : (<><Check className="mr-1.5 h-3.5 w-3.5" />Saved</>)}
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setActivePanel("none")}><X className="h-4 w-4" /></Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {availableColumns.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">Upload a CSV first in Project Config.</p>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-base font-medium">X Axis</Label>
-                      <Select value={xColumn} onValueChange={(v) => v && setXColumn(v)}>
-                        <SelectTrigger><SelectValue placeholder="Select column" /></SelectTrigger>
-                        <SelectContent>
-                          {availableColumns.map((col) => (<SelectItem key={col} value={col}>{col}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-base font-medium">Color (group by)</Label>
-                      <Select value={colorColumn || "__none__"} onValueChange={(v) => setColorColumn(!v || v === "__none__" ? "" : v)}>
-                        <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">None</SelectItem>
-                          {availableColumns.filter((c) => c !== xColumn).map((col) => (
-                            <SelectItem key={col} value={col}>{col}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-base font-medium">Tooltip Columns</Label>
-                      <ScrollArea className="h-24 rounded-md border p-2">
-                        <div className="space-y-1.5">
-                          {availableColumns.map((col) => (
-                            <label key={col} className="flex items-center space-x-2 cursor-pointer">
-                              <Checkbox checked={tooltipColumns.includes(col)} onCheckedChange={() => toggleTooltipColumn(col)} />
-                              <span className="text-base">{col}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-base font-medium">Lines</h3>
-                      <Badge variant="secondary">{enabledLines.length} active / {plotLines.length} total</Badge>
-                    </div>
-                    <div className="flex items-end gap-2">
-                      <div className="flex-1 space-y-1">
-                        <Label className="text-base">Version</Label>
-                        <Select value={addLineVersion} onValueChange={(v) => v && setAddLineVersion(v)}>
-                          <SelectTrigger><SelectValue placeholder="Select version..." /></SelectTrigger>
-                          <SelectContent>
-                            {versions.map((v) => (<SelectItem key={v.id} value={v.id.toString()}>{v.label}</SelectItem>))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <Label className="text-base">Y Column</Label>
-                        <Select value={addLineColumn} onValueChange={(v) => v && setAddLineColumn(v)}>
-                          <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
-                          <SelectContent>
-                            {selectableYColumns.map((col) => (<SelectItem key={col} value={col}>{col}</SelectItem>))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button size="sm" onClick={addLine} disabled={!addLineVersion || !addLineColumn}>
-                        <Plus className="mr-1 h-3.5 w-3.5" />
-                        Add
-                      </Button>
-                    </div>
-
-                    {plotLines.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">No lines configured. Add one above.</p>
-                    ) : (
-                      <div className="rounded-md border">
-                        <table className="w-full text-base">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground w-10"></th>
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Version</th>
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Y Column</th>
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground w-10">Color</th>
-                              <th className="px-3 py-2 text-right font-medium text-muted-foreground w-10"></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {plotLines.map((line) => (
-                              <tr key={line.id} className={`border-b last:border-0 ${!line.enabled ? "opacity-40" : ""}`}>
-                                <td className="px-3 py-2">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleLine(line.id)} title={line.enabled ? "Disable" : "Enable"}>
-                                    {line.enabled ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                                  </Button>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <Badge variant="outline">{line.versionLabel}</Badge>
-                                </td>
-                                <td className="px-3 py-2 font-mono text-base">{line.yColumn}</td>
-                                <td className="px-3 py-2">
-                                  <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: line.color }} />
-                                </td>
-                                <td className="px-3 py-2 text-right">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeLine(line.id)}>
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ── Diff Panel ── */}
-        {activePanel === "diff" && (
-          <Card className="mb-6">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Diff Mode</CardTitle>
-                <Button variant="ghost" size="icon" onClick={() => setActivePanel("none")}><X className="h-4 w-4" /></Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Label className="text-base">Enable Diff Mode</Label>
-                  <Switch checked={diffMode} onCheckedChange={setDiffMode} />
-                </div>
-                {diffMode && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-base">Base Version</Label>
-                      <Select value={baseVersionId?.toString() ?? undefined} onValueChange={(v) => setBaseVersionId(v ? Number(v) : null)}>
-                        <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                        <SelectContent>
-                          {versions.map((v) => (<SelectItem key={v.id} value={v.id.toString()}>{v.label}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-base">Compare Version</Label>
-                      <Select value={compareVersionId?.toString() ?? undefined} onValueChange={(v) => setCompareVersionId(v ? Number(v) : null)}>
-                        <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                        <SelectContent>
-                          {versions.map((v) => (<SelectItem key={v.id} value={v.id.toString()}>{v.label}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-base">Display</Label>
-                      <div className="flex gap-1">
-                        {([["overlay", "Overlay"], ["absolute", "Abs Diff"], ["percentage", "% Diff"]] as const).map(([mode, modeLabel]) => (
-                          <Button key={mode} size="sm" variant={diffDisplayMode === mode ? "default" : "outline"} className="flex-1 text-sm" onClick={() => setDiffDisplayMode(mode as DiffDisplayMode)}>
-                            {modeLabel}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                    {diffResult && diffResult.columns.length > 1 && (
-                      <div className="space-y-2">
-                        <Label className="text-base">Diff Column</Label>
-                        <Select value={diffYColumn} onValueChange={(v) => v && setDiffYColumn(v)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {diffResult.columns.map((col) => (<SelectItem key={col} value={col}>{col}</SelectItem>))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+            )}
+            <DialogFooter>
+              <Button size="sm" onClick={handleSaveConfig} disabled={!configDirty || saving}>
+                {saving ? "Saving..." : (<><Save className="mr-1.5 h-3.5 w-3.5" />Save</>)}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Chart area */}
         <Card>
@@ -699,12 +665,67 @@ export default function ProjectPage() {
               <CardTitle className="text-lg">
                 {diffMode ? "Diff Chart" : "Chart Overlay"}
               </CardTitle>
-              {!diffMode && enabledLines.length > 0 && (
-                <Badge variant="secondary">
-                  {enabledLines.length} line{enabledLines.length !== 1 ? "s" : ""}
-                </Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {!diffMode && enabledLines.length > 0 && (
+                  <Badge variant="secondary">
+                    {enabledLines.length} line{enabledLines.length !== 1 ? "s" : ""}
+                  </Badge>
+                )}
+                {!diffMode && (
+                  <Button variant="outline" size="icon" onClick={() => setShowPlotConfig(true)} title="Plot Settings">
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                )}
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-sm text-muted-foreground cursor-pointer" htmlFor="diff-toggle">Diff</Label>
+                  <Switch id="diff-toggle" checked={diffMode} onCheckedChange={setDiffMode} />
+                </div>
+              </div>
             </div>
+            {/* Diff controls inline */}
+            {diffMode && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Base Version</Label>
+                  <Select value={baseVersionId?.toString() ?? undefined} onValueChange={(v) => setBaseVersionId(v ? Number(v) : null)}>
+                    <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      {versions.map((v) => (<SelectItem key={v.id} value={v.id.toString()}>{v.label}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Compare Version</Label>
+                  <Select value={compareVersionId?.toString() ?? undefined} onValueChange={(v) => setCompareVersionId(v ? Number(v) : null)}>
+                    <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      {versions.map((v) => (<SelectItem key={v.id} value={v.id.toString()}>{v.label}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Display</Label>
+                  <div className="flex gap-1">
+                    {([["overlay", "Overlay"], ["absolute", "Abs Diff"], ["percentage", "% Diff"]] as const).map(([mode, modeLabel]) => (
+                      <Button key={mode} size="sm" variant={diffDisplayMode === mode ? "default" : "outline"} className="flex-1 text-xs" onClick={() => setDiffDisplayMode(mode as DiffDisplayMode)}>
+                        {modeLabel}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                {diffResult && diffResult.columns.length > 1 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Diff Column</Label>
+                    <Select value={diffYColumn} onValueChange={(v) => v && setDiffYColumn(v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {diffResult.columns.map((col) => (<SelectItem key={col} value={col}>{col}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             {diffMode ? (
@@ -734,6 +755,14 @@ export default function ProjectPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-4 left-4 z-50 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
+          <Check className="h-4 w-4 shrink-0" />
+          {toast}
+        </div>
+      )}
     </main>
   );
 }

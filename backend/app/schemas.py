@@ -73,6 +73,8 @@ class PlotLineCreate(BaseModel):
     color: str = "#3b82f6"
     enabled: bool = True
     sort_order: int = 0
+    axis: str = "left"
+    scalar: float = 1.0
 
 
 class PlotLineUpdate(BaseModel):
@@ -81,6 +83,8 @@ class PlotLineUpdate(BaseModel):
     color: Optional[str] = None
     enabled: Optional[bool] = None
     sort_order: Optional[int] = None
+    axis: Optional[str] = None
+    scalar: Optional[float] = None
 
 
 class PlotLineResponse(BaseModel):
@@ -91,6 +95,8 @@ class PlotLineResponse(BaseModel):
     color: str
     enabled: bool
     sort_order: int
+    axis: str
+    scalar: float
 
     model_config = ConfigDict(from_attributes=True)
 

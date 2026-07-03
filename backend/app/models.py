@@ -90,6 +90,8 @@ class PlotLine(Base):
     color = Column(String, nullable=False, default="#3b82f6")
     enabled = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
+    axis = Column(String, nullable=False, default="left")  # "left" or "right"
+    scalar = Column(Float, nullable=False, default=1.0)
 
     # Relationships
     plot_config = relationship("PlotConfig", back_populates="lines")

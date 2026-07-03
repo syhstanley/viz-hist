@@ -233,12 +233,19 @@ async def diff_versions(
         suffixes=("_base", "_compare"),
     ).fillna(0)
 
+    def _native(val):
+        """Convert numpy types to Python native for JSON serialization."""
+        if hasattr(val, "item"):
+            return val.item()
+        return val
+
     base_records, compare_records, diff_records, diff_pct_records = [], [], [], []
     for _, row in merged.iterrows():
-        base_row = {index_col: row[index_col]}
-        compare_row = {index_col: row[index_col]}
-        diff_row = {index_col: row[index_col]}
-        diff_pct_row = {index_col: row[index_col]}
+        idx_val = _native(row[index_col])
+        base_row = {index_col: idx_val}
+        compare_row = {index_col: idx_val}
+        diff_row = {index_col: idx_val}
+        diff_pct_row = {index_col: idx_val}
         for col in numeric_cols:
             b = float(row.get(f"{col}_base", 0))
             c = float(row.get(f"{col}_compare", 0))

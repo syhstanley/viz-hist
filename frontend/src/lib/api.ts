@@ -44,6 +44,8 @@ export interface PlotLine {
   color: string;
   enabled: boolean;
   sort_order: number;
+  axis: string;
+  scalar: number;
 }
 
 export interface PlotConfig {
@@ -65,6 +67,8 @@ export interface PlotLineCreate {
   color?: string;
   enabled?: boolean;
   sort_order?: number;
+  axis?: string;
+  scalar?: number;
 }
 
 export interface PlotConfigCreate {
