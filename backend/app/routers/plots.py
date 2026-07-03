@@ -139,6 +139,8 @@ async def update_plot_config(
                 color=line_data.color,
                 enabled=line_data.enabled,
                 sort_order=line_data.sort_order if line_data.sort_order else i,
+                axis=line_data.axis,
+                scalar=line_data.scalar,
             )
             db.add(line)
 
@@ -176,6 +178,8 @@ async def add_plot_line(
         color=body.color,
         enabled=body.enabled,
         sort_order=body.sort_order if body.sort_order else max_order + 1,
+        axis=body.axis,
+        scalar=body.scalar,
     )
     db.add(line)
     await db.commit()
