@@ -20,8 +20,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Trash2, Calendar, FolderOpen, Database,
-  Moon, Sun, ChevronRight, ChevronDown, FolderPlus,
+  Moon, Sun, ChevronRight, ChevronDown, FolderPlus, FileText,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function HomePage() {
   const router = useRouter();
@@ -30,15 +33,12 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [showCreate, setShowCreate] = useState(false);
+  // Create dialog
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createMode, setCreateMode] = useState<"project" | "folder">("project");
   const [createFolderId, setCreateFolderId] = useState<number | null>(null);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
-
-  // New folder
-  const [showNewFolder, setShowNewFolder] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
-  const [newFolderParentId, setNewFolderParentId] = useState<number | null>(null);
 
   // Dark mode
   const [dark, setDark] = useState(false);
@@ -82,17 +82,31 @@ export default function HomePage() {
     void fetchData();
   }, [fetchData]);
 
+  const openCreateDialog = (mode: "project" | "folder", folderId: number | null = null) => {
+    setCreateMode(mode);
+    setCreateFolderId(folderId);
+    setNewName("");
+    setShowCreateDialog(true);
+  };
+
   const handleCreate = async () => {
     if (!newName.trim()) return;
     try {
       setCreating(true);
-      const project = await createProject(newName.trim(), createFolderId);
+      if (createMode === "project") {
+        const project = await createProject(newName.trim(), createFolderId);
+        setShowCreateDialog(false);
+        setNewName("");
+        router.push(`/projects/${project.id}`);
+        return;
+      } else {
+        await createFolder(newName.trim(), createFolderId);
+      }
+      setShowCreateDialog(false);
       setNewName("");
-      setShowCreate(false);
-      setCreateFolderId(null);
-      router.push(`/projects/${project.id}`);
+      fetchData();
     } catch {
-      setError("Failed to create project.");
+      setError(`Failed to create ${createMode}.`);
     } finally {
       setCreating(false);
     }
@@ -107,17 +121,6 @@ export default function HomePage() {
     } catch {
       setError("Failed to delete project.");
     }
-  };
-
-  const handleCreateFolder = async () => {
-    if (!newFolderName.trim()) return;
-    try {
-      await createFolder(newFolderName.trim(), newFolderParentId);
-      setNewFolderName("");
-      setShowNewFolder(false);
-      setNewFolderParentId(null);
-      fetchData();
-    } catch { setError("Failed to create folder."); }
   };
 
   const handleDeleteFolder = async (e: React.MouseEvent, folderId: number) => {
@@ -183,7 +186,7 @@ export default function HomePage() {
           <Button
             variant="ghost" size="icon"
             className="h-6 w-6 opacity-0 group-hover/folder:opacity-100 transition-opacity text-muted-foreground"
-            onClick={() => { setCreateFolderId(folder.id); setShowCreate(true); }}
+            onClick={() => openCreateDialog("project", folder.id)}
             title="New project in this folder"
           >
             <Plus className="h-3 w-3" />
@@ -191,7 +194,7 @@ export default function HomePage() {
           <Button
             variant="ghost" size="icon"
             className="h-6 w-6 opacity-0 group-hover/folder:opacity-100 transition-opacity text-muted-foreground"
-            onClick={() => { setNewFolderParentId(folder.id); setShowNewFolder(true); }}
+            onClick={() => openCreateDialog("folder", folder.id)}
             title="New subfolder"
           >
             <FolderPlus className="h-3 w-3" />
@@ -238,84 +241,51 @@ export default function HomePage() {
             <Button variant="outline" size="icon" onClick={toggleDark} title={dark ? "Light mode" : "Dark mode"}>
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => { setNewFolderParentId(null); setShowNewFolder(true); }}>
-              <FolderPlus className="mr-1.5 h-4 w-4" />
-              New Folder
-            </Button>
-            <Button onClick={() => { setCreateFolderId(null); setShowCreate(!showCreate); }}>
+            <Button onClick={() => openCreateDialog("project")}>
               <Plus className="mr-2 h-4 w-4" />
-              New Project
+              New
             </Button>
           </div>
         </div>
 
-        {/* New folder inline */}
-        {showNewFolder && (
-          <Card className="mb-6">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
-                {newFolderParentId ? "New Subfolder" : "New Folder"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-3">
-                <Input
-                  placeholder="Folder name"
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()}
-                  autoFocus
+        {/* Create Dialog */}
+        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create New</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <Button
+                  variant={createMode === "project" ? "default" : "outline"}
                   className="flex-1"
-                />
-                <Button onClick={handleCreateFolder} disabled={!newFolderName.trim()}>
-                  Create
-                </Button>
-                <Button variant="outline" onClick={() => { setShowNewFolder(false); setNewFolderName(""); setNewFolderParentId(null); }}>
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Create project inline card */}
-        {showCreate && (
-          <Card className="mb-6">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Create New Project</CardTitle>
-              <CardDescription>
-                {createFolderId
-                  ? "Project will be created inside the selected folder."
-                  : "Give your project a name. You can upload CSV data and configure charts on the next page."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-3">
-                <Input
-                  placeholder="e.g. Revenue Q4 2025"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                  autoFocus
-                  className="flex-1"
-                />
-                <Button onClick={handleCreate} disabled={!newName.trim() || creating}>
-                  {creating ? "Creating..." : "Create"}
+                  onClick={() => setCreateMode("project")}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Project
                 </Button>
                 <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowCreate(false);
-                    setNewName("");
-                    setCreateFolderId(null);
-                  }}
+                  variant={createMode === "folder" ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setCreateMode("folder")}
                 >
-                  Cancel
+                  <FolderPlus className="mr-2 h-4 w-4" />
+                  Folder
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        )}
+              <Input
+                placeholder={createMode === "project" ? "e.g. Revenue Q4 2025" : "Folder name"}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                autoFocus
+              />
+              <Button className="w-full" onClick={handleCreate} disabled={!newName.trim() || creating}>
+                {creating ? "Creating..." : `Create ${createMode === "project" ? "Project" : "Folder"}`}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Error */}
         {error && (
@@ -340,9 +310,9 @@ export default function HomePage() {
               <p className="text-muted-foreground/70 text-sm mb-6">
                 Create your first project to get started
               </p>
-              <Button onClick={() => setShowCreate(true)}>
+              <Button onClick={() => openCreateDialog("project")}>
                 <Plus className="mr-2 h-4 w-4" />
-                New Project
+                New
               </Button>
             </CardContent>
           </Card>
