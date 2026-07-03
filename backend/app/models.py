@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -16,6 +16,14 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
+def utcnow() -> datetime:
+    """Naive UTC timestamp (replaces deprecated datetime.utcnow).
+
+    Kept naive so it stays consistent with existing rows in SQLite.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class Folder(Base):
     __tablename__ = "folders"
 
@@ -24,7 +32,7 @@ class Folder(Base):
     parent_id = Column(
         Integer, ForeignKey("folders.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
     # Relationships
     parent = relationship("Folder", back_populates="children", remote_side=[id])
@@ -40,8 +48,8 @@ class Project(Base):
     folder_id = Column(
         Integer, ForeignKey("folders.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     # Relationships
     folder = relationship("Folder", back_populates="projects")
@@ -66,7 +74,7 @@ class DataVersion(Base):
     schema_def = Column(JSON, nullable=True)
     row_count = Column(Integer, nullable=True)
     file_size = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
     # Relationships
     project = relationship("Project", back_populates="versions")
@@ -87,8 +95,8 @@ class PlotConfig(Base):
     tooltip_columns = Column(JSON, nullable=True)
     metadata_json = Column(JSON, nullable=True)  # type-specific settings (e.g. diff params)
     is_default = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     # Relationships
     project = relationship("Project", back_populates="plot_configs")

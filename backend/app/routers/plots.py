@@ -114,18 +114,13 @@ async def update_plot_config(
 ):
     config = await _get_config_or_404(project_id, config_id, db)
 
-    if body.name is not None:
-        config.name = body.name
-    if body.chart_type is not None:
-        config.chart_type = body.chart_type
-    if body.x_column is not None:
-        config.x_column = body.x_column
-    if body.color_column is not None:
-        config.color_column = body.color_column
-    if body.metadata_json is not None:
-        config.metadata_json = body.metadata_json
-    if body.tooltip_columns is not None:
-        config.tooltip_columns = body.tooltip_columns
+    # exclude_unset: only fields present in the request are applied, so
+    # clients can explicitly set nullable fields (x_column, etc.) back to null
+    updates = body.model_dump(exclude_unset=True, exclude={"lines"})
+    for field, value in updates.items():
+        if field in ("name", "chart_type") and value is None:
+            continue  # non-nullable columns: ignore explicit nulls
+        setattr(config, field, value)
 
     # If lines are provided, do a full replacement
     if body.lines is not None:

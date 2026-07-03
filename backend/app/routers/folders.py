@@ -85,13 +85,28 @@ async def update_folder(
     folder = result.scalar_one_or_none()
     if folder is None:
         raise HTTPException(status_code=404, detail="Folder not found")
-    if body.name is not None:
-        folder.name = body.name
-    if body.parent_id is not None:
-        # Prevent circular references
-        if body.parent_id == folder_id:
-            raise HTTPException(status_code=400, detail="Cannot set folder as its own parent")
-        folder.parent_id = body.parent_id
+
+    updates = body.model_dump(exclude_unset=True)
+    if updates.get("name") is not None:
+        folder.name = updates["name"]
+    if "parent_id" in updates:
+        new_parent_id = updates["parent_id"]
+        if new_parent_id is not None:
+            # Prevent circular references: walk up the ancestor chain of the
+            # new parent; if we hit this folder, the move would create a cycle
+            ancestor_id = new_parent_id
+            while ancestor_id is not None:
+                if ancestor_id == folder_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Cannot move folder into itself or its descendants",
+                    )
+                res = await db.execute(select(Folder).where(Folder.id == ancestor_id))
+                ancestor = res.scalar_one_or_none()
+                if ancestor is None:
+                    raise HTTPException(status_code=404, detail="Parent folder not found")
+                ancestor_id = ancestor.parent_id
+        folder.parent_id = new_parent_id  # None = move to root
     db.add(folder)
     await db.commit()
     await db.refresh(folder)
