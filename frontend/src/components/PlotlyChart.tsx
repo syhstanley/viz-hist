@@ -6,7 +6,7 @@ import type { PlotParams } from "react-plotly.js";
 // Plotly doesn't work with SSR - must be dynamically imported
 const Plot = dynamic(
   () =>
-    import("react-plotly.js").then((mod) => {
+    import("react-plotly.js").then(() => {
       // Use the minified plotly bundle
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const Plotly = require("plotly.js-dist-min");

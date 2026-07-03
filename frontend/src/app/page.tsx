@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProjects, createProject, deleteProject, type Project } from "@/lib/api";
 import { format } from "date-fns";
@@ -26,7 +26,7 @@ export default function HomePage() {
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getProjects();
@@ -37,11 +37,12 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetching on mount
+    void fetchProjects();
+  }, [fetchProjects]);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;

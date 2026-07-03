@@ -15,8 +15,6 @@ import {
   type Version,
   type VersionData,
   type DiffResult,
-  type PlotConfig,
-  type PlotLine as ApiPlotLine,
 } from "@/lib/api";
 import ChartOverlay, { type TraceLine } from "@/components/ChartOverlay";
 import DiffChart, { type DiffDisplayMode } from "@/components/DiffChart";
@@ -192,12 +190,19 @@ export default function ProjectPage() {
     }
   }, [projectId]);
 
-  useEffect(() => { fetchProject(); }, [fetchProject]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetching on mount
+    void fetchProject();
+  }, [fetchProject]);
 
   // ── Load version data for enabled lines ──
   useEffect(() => {
     const versionIds = new Set(enabledLines.map((l) => l.versionId));
-    if (versionIds.size === 0) { setVersionDataMap(new Map()); return; }
+    if (versionIds.size === 0) {
+      // Defer to avoid synchronous setState in effect body
+      const id = requestAnimationFrame(() => setVersionDataMap(new Map()));
+      return () => cancelAnimationFrame(id);
+    }
 
     const loadData = async () => {
       const newMap = new Map<number, Record<string, number | string>[]>();
@@ -213,7 +218,7 @@ export default function ProjectPage() {
       }
       setVersionDataMap(newMap);
     };
-    loadData();
+    void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabledLines, projectId, versions]);
 
@@ -231,7 +236,10 @@ export default function ProjectPage() {
 
   // ── Load diff ──
   useEffect(() => {
-    if (!diffMode || baseVersionId === null || compareVersionId === null) { setDiffResult(null); return; }
+    if (!diffMode || baseVersionId === null || compareVersionId === null) {
+      const id = requestAnimationFrame(() => setDiffResult(null));
+      return () => cancelAnimationFrame(id);
+    }
     const loadDiff = async () => {
       try {
         const result = await getDiff(projectId, baseVersionId, compareVersionId);
@@ -239,7 +247,7 @@ export default function ProjectPage() {
         if (!diffYColumn && result.columns.length > 0) setDiffYColumn(result.columns[0]);
       } catch { setError("Failed to load diff."); }
     };
-    loadDiff();
+    void loadDiff();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diffMode, baseVersionId, compareVersionId, projectId]);
 
