@@ -1,0 +1,20 @@
+# Backend
+backend/data/
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
