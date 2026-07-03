@@ -170,6 +170,12 @@ Backed by plain `.js` files in the repo-root `templates/` directory
 - **Persistence**: templates are plain files in the repo-root `templates/`
   directory (override with `VIZ_TEMPLATES_DIR`), edited via `/templates` page
   or any editor, committed to git manually.
+- **Admin UI** (`/templates`): management list (create / edit / delete, shows
+  compiled name + validity per template); editing opens a wide overlay dialog
+  with code editor and live preview side by side. Preview data comes from
+  sample CSVs parsed client-side (`lib/csv.ts`) — nothing is uploaded.
+- **AI authoring**: a copyable prompt (`lib/templatePrompt.ts`) describing the
+  template contract lets users generate templates with any AI assistant.
 - Trust model: template authors are internal users. If ever exposed publicly,
   move execution into a sandboxed iframe / Web Worker.
 

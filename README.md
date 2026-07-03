@@ -12,7 +12,8 @@ A web application for visualizing and comparing historical time-series data acro
 - **Plot Settings** — Dialog overlay to configure X axis, color grouping, tooltip columns, and manage lines.
 - **Dark Mode** — Toggle with sun/moon button, persists to localStorage, respects system preference. Plotly charts adapt.
 - **Tooltips** — Shows original + scaled values when scalar is applied. Excludes other plotted columns to avoid clutter.
-- **Custom Chart Templates** — Write JS templates (data transform + Plotly figure) in the browser editor at `/templates`. Templates declare `params` that auto-generate the chart's config UI. Stored as files in `templates/` (git-tracked). Broken template code only breaks its own chart card — never the site.
+- **Custom Chart Templates** — Write JS templates (data transform + Plotly figure) at `/templates`: a management list plus a wide editor+preview overlay. Templates declare `params` that auto-generate the chart's config UI. Stored as files in `templates/` (git-tracked). Broken template code only breaks its own chart card — never the site.
+- **AI Template Generation** — `/templates` ships a one-click copyable prompt (template contract, param types, hard rules) so any AI assistant can write a working template from a description + sample CSV rows.
 
 ## Tech Stack
 
@@ -86,7 +87,7 @@ viz-hist/
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── page.tsx     # Home: folder tree, project cards
-│   │   │   ├── templates/page.tsx      # Template admin: editor + live preview
+│   │   │   ├── templates/page.tsx      # Template admin: list + editor/preview overlay + AI prompt
 │   │   │   └── projects/[id]/page.tsx  # Project: plots, settings
 │   │   ├── components/
 │   │   │   ├── PlotCard.tsx      # Line/Diff/Custom chart dispatch
@@ -135,9 +136,15 @@ Full API docs available at `http://localhost:8001/docs` (Swagger UI).
 
 ## Custom Chart Templates
 
-Create/edit templates at `/templates` (code editor + live preview with sample
-CSVs, parsed entirely in the browser). A template is a JS file that evaluates
-to an object:
+Manage templates at `/templates`: the main page lists templates
+(create / edit / delete); clicking one opens a wide overlay with the code
+editor on the left and a live preview on the right (feed it sample CSVs —
+parsed entirely in the browser, nothing is uploaded). The page also includes a
+collapsible **"Generate a template with AI"** section with a copyable prompt:
+paste it into any AI assistant together with a chart description and a few
+sample CSV rows, and it returns template code you can paste straight in.
+
+A template is a JS file that evaluates to an object:
 
 ```js
 ({
