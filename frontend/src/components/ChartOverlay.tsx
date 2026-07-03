@@ -135,14 +135,24 @@ export default function ChartOverlay({
     const traces: Plotly.Data[] = lines.map((line) => {
       const s = line.scalar ?? 1.0;
       const isRight = line.axis === "right";
-      const x = line.data.map((r) => r[xColumn]);
-      const y = line.data.map((r) => Number(r[line.yColumn]) * s);
+
+      // Sort data by x value so lines connect in x-axis order
+      const indices = line.data.map((_, i) => i);
+      indices.sort((a, b) => {
+        const va = line.data[a][xColumn];
+        const vb = line.data[b][xColumn];
+        if (typeof va === "number" && typeof vb === "number") return va - vb;
+        return String(va).localeCompare(String(vb));
+      });
+
+      const x = indices.map((i) => line.data[i][xColumn]);
+      const y = indices.map((i) => Number(line.data[i][line.yColumn]) * s);
       const hover = buildHoverTemplate(
         xColumn,
         line.yColumn,
         tooltipColumns,
-        (i) => line.data[i],
-        line.data.length,
+        (i) => line.data[indices[i]],
+        indices.length,
         allPlottedYCols,
         s
       );
