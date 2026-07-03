@@ -217,7 +217,7 @@ export default function HomePage() {
   };
 
   const FolderNode = ({ folder, depth = 0 }: { folder: FolderTree; depth?: number }) => {
-    const [expanded, setExpanded] = useState(true);
+    const [expanded, setExpanded] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const hasContent = folder.children.length > 0 || folder.projects.length > 0;
 
