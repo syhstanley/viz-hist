@@ -6,7 +6,7 @@ A web application for visualizing and comparing historical time-series data acro
 
 - **Folder Organization** — Nested folders to organize projects. Create, rename, move, delete via context menu.
 - **Project Management** — Create projects, upload multiple CSV versions, edit labels, delete versions.
-- **Multiple Plots per Project** — Each project can have multiple independent charts (Line Chart or Diff Chart).
+- **Multiple Plots per Project** — Each project can have multiple independent charts (Line Chart, Diff Chart, or Custom Template).
 - **Line Chart** — Overlay lines from different versions/columns. Configurable X/Y axes, dual Y-axis (left/right), per-line scalar multiplier.
 - **Diff Chart** — Compare two versions with overlay, absolute diff, or percentage diff views.
 - **Plot Settings** — Dialog overlay to configure X axis, color grouping, tooltip columns, and manage lines.
@@ -77,27 +77,34 @@ viz-hist/
 │   │       ├── folders.py   # Folder CRUD + tree
 │   │       ├── projects.py  # Project CRUD
 │   │       ├── versions.py  # Upload, data, diff
-│   │       └── plots.py     # PlotConfig + PlotLine CRUD
-│   ├── tests/               # pytest (48 tests)
+│   │       ├── plots.py     # PlotConfig + PlotLine CRUD
+│   │       └── templates.py # Template file CRUD
+│   ├── tests/               # pytest (78 tests)
 │   ├── data/                # SQLite DB + uploaded CSVs
 │   └── pyproject.toml
 ├── frontend/
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── page.tsx     # Home: folder tree, project cards
+│   │   │   ├── templates/page.tsx      # Template admin: editor + live preview
 │   │   │   └── projects/[id]/page.tsx  # Project: plots, settings
 │   │   ├── components/
-│   │   │   ├── PlotCard.tsx      # Line/Diff chart card
+│   │   │   ├── PlotCard.tsx      # Line/Diff/Custom chart dispatch
 │   │   │   ├── ChartOverlay.tsx  # Plotly line chart with dual axis
 │   │   │   ├── DiffChart.tsx     # Plotly diff chart
+│   │   │   ├── CustomChartCard.tsx    # Template-driven chart card
+│   │   │   ├── TemplateParamForm.tsx  # Param controls + error boundary
 │   │   │   └── ui/              # shadcn components
 │   │   └── lib/
 │   │       ├── api.ts           # API client + types
+│   │       ├── templates.ts     # Template compile/run (fault-isolated)
+│   │       ├── csv.ts           # Client-side CSV parser (preview)
 │   │       └── useDarkMode.ts   # Dark mode hook
-│   ├── tests/               # Vitest unit tests (19 tests)
-│   ├── e2e/                 # Playwright E2E tests (11 tests)
+│   ├── tests/               # Vitest unit tests (45 tests)
+│   ├── e2e/                 # Playwright E2E tests (15 tests)
 │   ├── playwright.config.ts
 │   └── vitest.config.ts
+├── templates/               # Custom chart templates (JS files, git-tracked)
 ├── deploy.sh
 ├── design.md                # Detailed design document
 └── Todo.md                  # Progress tracker
@@ -109,7 +116,7 @@ viz-hist/
 Folder (nested via parent_id)
   └── Project (folder_id, nullable)
         ├── DataVersion (CSV file + schema)
-        └── PlotConfig (chart_type: "line" | "diff_line")
+        └── PlotConfig (chart_type: "line" | "diff_line" | "custom")
               └── PlotLine (version_id, y_column, axis, scalar)
 ```
 
@@ -125,6 +132,33 @@ Folder (nested via parent_id)
 | Plots | `POST/GET/PUT/DELETE /api/projects/{id}/plots/{cid}`, `POST/PATCH/DELETE .../lines/{lid}` |
 
 Full API docs available at `http://localhost:8001/docs` (Swagger UI).
+
+## Custom Chart Templates
+
+Create/edit templates at `/templates` (code editor + live preview with sample
+CSVs, parsed entirely in the browser). A template is a JS file that evaluates
+to an object:
+
+```js
+({
+  name: "My Chart",
+  params: [
+    // types: string | number | boolean | column | version | select
+    { key: "column", label: "Y Column", type: "column" },
+  ],
+  render(ctx) {
+    // ctx.versions: [{ id, label, columns, rows }]  — all uploaded versions
+    // ctx.params:   current values of the params above
+    // ctx.dark:     dark mode flag
+    return { data: [/* plotly traces */], layout: {} };
+  },
+})
+```
+
+Templates live in `templates/*.js` — commit them to git for history. User code
+runs only in the browser inside try/catch + an error boundary: a broken
+template shows an error card on its own chart, the rest of the app keeps
+working. To use one, add a plot and pick the template as its type.
 
 ## Testing
 

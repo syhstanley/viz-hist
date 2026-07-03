@@ -60,7 +60,7 @@ PlotConfig
   id: int (PK)
   project_id: int (FK -> Project, CASCADE)
   name: str (default "Default")
-  chart_type: str (default "line")  -- "line", "diff_line"
+  chart_type: str (default "line")  -- "line", "diff_line", "custom"
   x_column: str (nullable)
   color_column: str (nullable)
   tooltip_columns: JSON (nullable)
@@ -123,6 +123,17 @@ PlotLine
 |--------|------|-------------|
 | GET | /api/projects/{id}/diff?base_id=&compare_id= | Compute diff |
 
+### Templates
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/templates | List all templates (id + code + mtime) |
+| GET | /api/templates/{id} | Get one template |
+| PUT | /api/templates/{id} | Create or update (upsert, atomic write) |
+| DELETE | /api/templates/{id} | Delete template file |
+
+Backed by plain `.js` files in the repo-root `templates/` directory
+(`VIZ_TEMPLATES_DIR` overrides). The backend never executes template code.
+
 ### Plot Configs
 | Method | Path | Description |
 |--------|------|-------------|
@@ -181,9 +192,13 @@ PlotLine
 
 ## Deployment
 
-- `deploy.sh` — builds frontend, restarts services
-- Backend: `uvicorn app.main:app --port 8001`
-- Frontend: `npm run build && npm start` (port 3000)
+- Runs as systemd user services (linger enabled, so they survive logout):
+  - `viz-hist-backend` — uvicorn on port 8001
+  - `viz-hist-frontend` — `npm start` on port 3000
+  - Unit files: `~/.config/systemd/user/viz-hist-{backend,frontend}.service`
+- `deploy.sh` — builds frontend, then restarts both services
+- Manage: `systemctl --user restart viz-hist-backend viz-hist-frontend`
+- Logs: `journalctl --user -u viz-hist-backend -f`
 - `BACKEND_URL` env var configures API proxy target
 
 ## Testing
