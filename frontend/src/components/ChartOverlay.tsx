@@ -42,7 +42,7 @@ const CHART_FONT: Partial<Plotly.Font> = {
   color: "#374151",
 };
 
-function buildHoverTemplate(
+export function buildHoverTemplate(
   xColumn: string,
   yCol: string,
   tooltipColumns: string[],
