@@ -48,6 +48,7 @@ async def list_projects(db: AsyncSession = Depends(get_db)):
         ProjectResponse(
             id=p.id,
             name=p.name,
+            folder_id=p.folder_id,
             created_at=p.created_at,
             updated_at=p.updated_at,
             version_count=len(p.versions),

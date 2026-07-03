@@ -178,7 +178,7 @@ function DiffLinePlotCard({ config, projectId, versions, onEdit, onDelete, canDe
           <div className="space-y-1.5">
             <Label className="text-sm">Base Version</Label>
             <Select value={baseVersionId?.toString() ?? undefined} onValueChange={(v) => setBaseVersionId(v ? Number(v) : null)}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Select...">{baseVersionId != null ? versions.find((v) => v.id === baseVersionId)?.label : undefined}</SelectValue></SelectTrigger>
               <SelectContent>
                 {versions.map((v) => (<SelectItem key={v.id} value={v.id.toString()}>{v.label}</SelectItem>))}
               </SelectContent>
@@ -187,7 +187,7 @@ function DiffLinePlotCard({ config, projectId, versions, onEdit, onDelete, canDe
           <div className="space-y-1.5">
             <Label className="text-sm">Compare Version</Label>
             <Select value={compareVersionId?.toString() ?? undefined} onValueChange={(v) => setCompareVersionId(v ? Number(v) : null)}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Select...">{compareVersionId != null ? versions.find((v) => v.id === compareVersionId)?.label : undefined}</SelectValue></SelectTrigger>
               <SelectContent>
                 {versions.map((v) => (<SelectItem key={v.id} value={v.id.toString()}>{v.label}</SelectItem>))}
               </SelectContent>

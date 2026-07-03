@@ -352,7 +352,11 @@ export default function HomePage() {
               </p>
               <Select value={moveDestination} onValueChange={(v) => setMoveDestination(v ?? "__root__")}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>
+                    {moveDestination === "__root__"
+                      ? "/ (Root)"
+                      : allFolders.find((f) => f.id.toString() === moveDestination)?.name ?? moveDestination}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__root__">/ (Root)</SelectItem>

@@ -591,7 +591,7 @@ export default function ProjectPage() {
                     <div className="flex-1 space-y-1">
                       <Label className="text-base">Version</Label>
                       <Select value={addLineVersion} onValueChange={(v) => v && setAddLineVersion(v)}>
-                        <SelectTrigger><SelectValue placeholder="Select version..." /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Select version...">{addLineVersion ? versions.find((v) => v.id.toString() === addLineVersion)?.label : undefined}</SelectValue></SelectTrigger>
                         <SelectContent>
                           {versions.map((v) => (<SelectItem key={v.id} value={v.id.toString()}>{v.label}</SelectItem>))}
                         </SelectContent>
