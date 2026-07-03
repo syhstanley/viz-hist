@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   getProject,
-  getVersionData,
   uploadCSV,
   updateVersionLabel,
   deleteVersion,
@@ -16,12 +15,11 @@ import {
   deletePlotConfig,
   type ProjectDetail,
   type Version,
-  type VersionData,
   type DiffResult,
   type PlotConfig,
 } from "@/lib/api";
-import ChartOverlay, { type TraceLine } from "@/components/ChartOverlay";
 import DiffChart, { type DiffDisplayMode } from "@/components/DiffChart";
+import PlotCard from "@/components/PlotCard";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,7 +62,6 @@ import {
   EyeOff,
   Pencil,
   FileSpreadsheet,
-  Settings,
   Moon,
   Sun,
 } from "lucide-react";
@@ -104,7 +101,6 @@ export default function ProjectPage() {
   const [plotConfigId, setPlotConfigId] = useState<number | null>(null);
   const [plotConfigName, setPlotConfigName] = useState("Default");
   const [plotLines, setPlotLines] = useState<UIPlotLine[]>([]);
-  const [versionDataMap, setVersionDataMap] = useState<Map<number, Record<string, number | string>[]>>(new Map());
 
   // Column config
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
@@ -244,47 +240,6 @@ export default function ProjectPage() {
     void fetchProject();
   }, [fetchProject]);
 
-  // ── Load version data for enabled lines ──
-  useEffect(() => {
-    const versionIds = new Set(enabledLines.map((l) => l.versionId));
-    if (versionIds.size === 0) {
-      // Defer to avoid synchronous setState in effect body
-      const id = requestAnimationFrame(() => setVersionDataMap(new Map()));
-      return () => cancelAnimationFrame(id);
-    }
-
-    const loadData = async () => {
-      const newMap = new Map<number, Record<string, number | string>[]>();
-      for (const vId of versionIds) {
-        try {
-          const vData: VersionData = await getVersionData(projectId, vId);
-          if (vData.columns.length > 0 && availableColumns.length === 0) {
-            setAvailableColumns(vData.columns);
-            if (!xColumn) setXColumn(vData.columns[0]);
-          }
-          newMap.set(vId, vData.rows);
-        } catch { /* skip */ }
-      }
-      setVersionDataMap(newMap);
-    };
-    void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabledLines, projectId, versions]);
-
-  // Build traces for chart
-  const chartLines: TraceLine[] = useMemo(() => {
-    return enabledLines
-      .filter((l) => versionDataMap.has(l.versionId))
-      .map((l) => ({
-        label: `${l.yColumn} (${l.versionLabel})`,
-        data: versionDataMap.get(l.versionId)!,
-        yColumn: l.yColumn,
-        color: l.color,
-        axis: l.axis,
-        scalar: l.scalar,
-      }));
-  }, [enabledLines, versionDataMap]);
-
   // ── Load diff ──
   useEffect(() => {
     if (!diffMode || baseVersionId === null || compareVersionId === null) {
@@ -399,12 +354,6 @@ export default function ProjectPage() {
     ]);
     setAddLineVersion("");
     setAddLineColumn("");
-  };
-
-  const handleSwitchConfig = (configId: number) => {
-    const cfg = allPlotConfigs.find((c) => c.id === configId);
-    if (!cfg) return;
-    loadConfig(cfg, versions, availableColumns);
   };
 
   const handleNewConfig = async () => {
@@ -607,34 +556,7 @@ export default function ProjectPage() {
         <Dialog open={showPlotConfig} onOpenChange={setShowPlotConfig}>
           <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <div className="flex items-center justify-between">
-                <DialogTitle>Plot Settings</DialogTitle>
-                <div className="flex items-center gap-2">
-                  {allPlotConfigs.length > 1 && (
-                    <Select value={plotConfigId?.toString() ?? undefined} onValueChange={(v) => v && handleSwitchConfig(Number(v))}>
-                      <SelectTrigger className="h-8 w-40 text-sm">
-                        <SelectValue placeholder="Select config..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {allPlotConfigs.map((c) => (
-                          <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {allPlotConfigs.length <= 1 && plotConfigName && (
-                    <span className="text-sm text-muted-foreground">{plotConfigName}</span>
-                  )}
-                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleNewConfig}>
-                    <Plus className="mr-1 h-3 w-3" />New
-                  </Button>
-                  {plotConfigId && allPlotConfigs.length > 1 && (
-                    <Button variant="outline" size="sm" className="h-8 text-xs text-destructive hover:text-destructive" onClick={() => handleDeleteConfig(plotConfigId)}>
-                      <Trash2 className="mr-1 h-3 w-3" />Delete
-                    </Button>
-                  )}
-                </div>
-              </div>
+              <DialogTitle>{plotConfigName || "Plot Settings"}</DialogTitle>
             </DialogHeader>
             {availableColumns.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">Upload a CSV first in Project Config.</p>
@@ -785,31 +707,16 @@ export default function ProjectPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Chart area */}
-        <Card>
+        {/* Diff section */}
+        <Card className="mb-4">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">
-                {diffMode ? "Diff Chart" : (plotConfigName && plotConfigName !== "Default" ? plotConfigName : "Chart Overlay")}
-              </CardTitle>
-              <div className="flex items-center gap-2">
-                {!diffMode && enabledLines.length > 0 && (
-                  <Badge variant="secondary">
-                    {enabledLines.length} line{enabledLines.length !== 1 ? "s" : ""}
-                  </Badge>
-                )}
-                {!diffMode && (
-                  <Button variant="outline" size="icon" onClick={() => setShowPlotConfig(true)} title="Plot Settings">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                )}
-                <div className="flex items-center gap-1.5">
-                  <Label className="text-sm text-muted-foreground cursor-pointer" htmlFor="diff-toggle">Diff</Label>
-                  <Switch id="diff-toggle" checked={diffMode} onCheckedChange={setDiffMode} />
-                </div>
+              <CardTitle className="text-lg">{diffMode ? "Diff Chart" : "Diff"}</CardTitle>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-sm text-muted-foreground cursor-pointer" htmlFor="diff-toggle">Diff</Label>
+                <Switch id="diff-toggle" checked={diffMode} onCheckedChange={setDiffMode} />
               </div>
             </div>
-            {/* Diff controls inline */}
             {diffMode && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-3">
                 <div className="space-y-1.5">
@@ -854,9 +761,9 @@ export default function ProjectPage() {
               </div>
             )}
           </CardHeader>
-          <CardContent>
-            {diffMode ? (
-              diffResult ? (
+          {diffMode && (
+            <CardContent>
+              {diffResult ? (
                 <DiffChart
                   baseData={diffResult.base}
                   compareData={diffResult.compare}
@@ -871,16 +778,32 @@ export default function ProjectPage() {
                 <div className="flex items-center justify-center h-64 text-muted-foreground">
                   Select base and compare versions to view the diff.
                 </div>
-              )
-            ) : (
-              <ChartOverlay
-                lines={chartLines}
-                xColumn={xColumn}
-                tooltipColumns={tooltipColumns}
-              />
-            )}
-          </CardContent>
+              )}
+            </CardContent>
+          )}
         </Card>
+
+        {/* Plot cards */}
+        <div className="space-y-4">
+          {allPlotConfigs.map((cfg) => (
+            <PlotCard
+              key={cfg.id}
+              config={cfg}
+              projectId={projectId}
+              versions={versions}
+              onEdit={() => {
+                loadConfig(cfg, versions, availableColumns);
+                setShowPlotConfig(true);
+              }}
+              onDelete={() => handleDeleteConfig(cfg.id)}
+              canDelete={allPlotConfigs.length > 1}
+            />
+          ))}
+          <Button variant="outline" className="w-full" onClick={handleNewConfig}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Plot
+          </Button>
+        </div>
       </div>
 
       {/* Toast */}
