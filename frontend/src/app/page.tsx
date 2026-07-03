@@ -20,7 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Trash2, Calendar, FolderOpen, Database,
-  Moon, Sun, ChevronRight, ChevronDown, FolderPlus, FileText, MoveRight,
+  Moon, Sun, ChevronRight, ChevronDown, FolderPlus, FileText, MoveRight, MoreHorizontal,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -163,9 +163,11 @@ export default function HomePage() {
     } catch { setError("Failed to move item."); }
   };
 
-  const ProjectCard = ({ project }: { project: Project }) => (
+  const ProjectCard = ({ project }: { project: Project }) => {
+    const [menuOpen, setMenuOpen] = useState(false);
+    return (
     <Card
-      className="group cursor-pointer transition-shadow hover:shadow-md"
+      className="group cursor-pointer transition-shadow hover:shadow-md relative"
       onClick={() => router.push(`/projects/${project.id}`)}
     >
       <CardHeader className="pb-3">
@@ -176,22 +178,27 @@ export default function HomePage() {
               Created {format(new Date(project.created_at), "MMM d, yyyy HH:mm")}
             </CardDescription>
           </div>
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="relative">
             <Button
               variant="ghost" size="icon"
-              className="text-muted-foreground"
-              onClick={(e) => { e.stopPropagation(); openMoveDialog("project", project.id, project.name); }}
-              title="Move to folder"
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground h-7 w-7"
+              onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
             >
-              <MoveRight className="h-4 w-4" />
+              <MoreHorizontal className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost" size="icon"
-              className="text-muted-foreground hover:text-destructive"
-              onClick={(e) => handleDelete(e, project.id)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} />
+                <div className="absolute right-0 top-8 z-50 min-w-[140px] rounded-lg border bg-popover p-1 text-popover-foreground shadow-md" onClick={(e) => e.stopPropagation()}>
+                  <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-muted" onClick={() => { setMenuOpen(false); openMoveDialog("project", project.id, project.name); }}>
+                    <MoveRight className="h-3.5 w-3.5" /> Move
+                  </button>
+                  <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-muted text-destructive" onClick={(e) => { setMenuOpen(false); handleDelete(e as unknown as React.MouseEvent, project.id); }}>
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -207,9 +214,11 @@ export default function HomePage() {
       </CardContent>
     </Card>
   );
+  };
 
   const FolderNode = ({ folder, depth = 0 }: { folder: FolderTree; depth?: number }) => {
     const [expanded, setExpanded] = useState(true);
+    const [menuOpen, setMenuOpen] = useState(false);
     const hasContent = folder.children.length > 0 || folder.projects.length > 0;
 
     return (
@@ -223,38 +232,34 @@ export default function HomePage() {
           </button>
           <FolderOpen className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-sm">{folder.name}</span>
-          <Button
-            variant="ghost" size="icon"
-            className="h-6 w-6 opacity-0 group-hover/folder:opacity-100 transition-opacity text-muted-foreground"
-            onClick={() => openCreateDialog("project", folder.id)}
-            title="New project in this folder"
-          >
-            <Plus className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost" size="icon"
-            className="h-6 w-6 opacity-0 group-hover/folder:opacity-100 transition-opacity text-muted-foreground"
-            onClick={() => openCreateDialog("folder", folder.id)}
-            title="New subfolder"
-          >
-            <FolderPlus className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost" size="icon"
-            className="h-6 w-6 opacity-0 group-hover/folder:opacity-100 transition-opacity text-muted-foreground"
-            onClick={() => openMoveDialog("folder", folder.id, folder.name)}
-            title="Move folder"
-          >
-            <MoveRight className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost" size="icon"
-            className="h-6 w-6 opacity-0 group-hover/folder:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-            onClick={(e) => handleDeleteFolder(e, folder.id)}
-            title="Delete folder"
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
+          <div className="relative">
+            <Button
+              variant="ghost" size="icon"
+              className="h-6 w-6 opacity-0 group-hover/folder:opacity-100 transition-opacity text-muted-foreground"
+              onClick={() => setMenuOpen(!menuOpen)}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </Button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                <div className="absolute left-0 top-7 z-50 min-w-[160px] rounded-lg border bg-popover p-1 text-popover-foreground shadow-md">
+                  <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-muted" onClick={() => { setMenuOpen(false); openCreateDialog("project", folder.id); }}>
+                    <Plus className="h-3.5 w-3.5" /> New Project
+                  </button>
+                  <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-muted" onClick={() => { setMenuOpen(false); openCreateDialog("folder", folder.id); }}>
+                    <FolderPlus className="h-3.5 w-3.5" /> New Subfolder
+                  </button>
+                  <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-muted" onClick={() => { setMenuOpen(false); openMoveDialog("folder", folder.id, folder.name); }}>
+                    <MoveRight className="h-3.5 w-3.5" /> Move
+                  </button>
+                  <button className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-muted text-destructive" onClick={(e) => { setMenuOpen(false); handleDeleteFolder(e as unknown as React.MouseEvent, folder.id); }}>
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
         {expanded && hasContent && (
           <div className="ml-3 border-l border-border pl-2">
