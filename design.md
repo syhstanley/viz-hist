@@ -145,6 +145,23 @@ PlotLine
 - Data sorted by X-axis values before rendering
 - Any column can be X or Y axis
 
+### Custom Template Chart (`chart_type: "custom"`)
+- User-defined chart: a JS file that evaluates to `({ name, description?, params, render(ctx) })`
+- `metadata_json` on the PlotConfig stores `{ template_id, params }`
+- `params` declarations auto-generate the config UI on the plot card
+  (types: string / number / boolean / column / version / select)
+- `render(ctx)` receives `{ versions: [{id,label,columns,rows}], params, dark }`
+  and returns a Plotly figure `{ data, layout? }`
+- **Fault isolation**: user code runs only in the browser, always inside
+  try/catch (`compileTemplate` / `runTemplate` in `lib/templates.ts`) plus a
+  React error boundary — a broken template renders an error card, the rest of
+  the app is unaffected. The backend never executes template code.
+- **Persistence**: templates are plain files in the repo-root `templates/`
+  directory (override with `VIZ_TEMPLATES_DIR`), edited via `/templates` page
+  or any editor, committed to git manually.
+- Trust model: template authors are internal users. If ever exposed publicly,
+  move execution into a sandboxed iframe / Web Worker.
+
 ### Diff Line Chart (`chart_type: "diff_line"`)
 - Compares two versions side by side
 - Three display modes: Overlay, Absolute Diff, Percentage Diff
@@ -173,7 +190,7 @@ PlotLine
 
 | Suite | Count | Command |
 |-------|-------|---------|
-| Backend (pytest) | 48 | `cd backend && pytest tests/` |
-| Frontend Unit (vitest) | 19 | `cd frontend && npm test` |
-| Frontend E2E (playwright) | 11 | `cd frontend && npm run test:e2e` |
-| **Total** | **78** | |
+| Backend (pytest) | 78 | `cd backend && pytest tests/` |
+| Frontend Unit (vitest) | 45 | `cd frontend && npm test` |
+| Frontend E2E (playwright) | 15 | `cd frontend && npm run test:e2e` |
+| **Total** | **138** | |

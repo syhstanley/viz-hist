@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   getProjects, createProject, deleteProject, updateProject,
   getFolderTree, getFolders, createFolder, deleteFolder, updateFolder,
@@ -20,7 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Trash2, Calendar, FolderOpen, Database,
-  Moon, Sun, ChevronRight, ChevronDown, FolderPlus, FileText, MoveRight, MoreHorizontal,
+  Moon, Sun, ChevronRight, ChevronDown, FolderPlus, FileText, MoveRight, MoreHorizontal, FileCode,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -291,6 +292,12 @@ export default function HomePage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Link href="/templates">
+              <Button variant="outline">
+                <FileCode className="mr-2 h-4 w-4" />
+                Templates
+              </Button>
+            </Link>
             <Button variant="outline" size="icon" onClick={toggleDark} title={dark ? "Light mode" : "Dark mode"}>
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>

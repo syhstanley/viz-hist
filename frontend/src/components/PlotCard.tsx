@@ -5,6 +5,7 @@ import { getVersionData, getDiff, type PlotConfig, type Version, type VersionDat
 import { useDarkMode } from "@/lib/useDarkMode";
 import ChartOverlay, { type TraceLine } from "./ChartOverlay";
 import DiffChart, { type DiffDisplayMode } from "./DiffChart";
+import CustomChartCard from "./CustomChartCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,15 @@ interface PlotCardProps {
 
 export default function PlotCard({ config, projectId, versions, onEdit, onDelete, canDelete }: PlotCardProps) {
   const dark = useDarkMode();
+
+  if (config.chart_type === "custom") {
+    return (
+      <CustomChartCard
+        config={config} projectId={projectId} versions={versions}
+        onEdit={onEdit} onDelete={onDelete} canDelete={canDelete} dark={dark}
+      />
+    );
+  }
 
   if (config.chart_type === "diff_line") {
     return (

@@ -283,6 +283,33 @@ export async function deletePlotConfig(
   await client.delete(`/projects/${projectId}/plots/${configId}`);
 }
 
+// ── Templates ──
+
+export interface TemplateFile {
+  id: string;
+  code: string;
+  updated_at: number;
+}
+
+export async function getTemplates(): Promise<TemplateFile[]> {
+  const res = await client.get<TemplateFile[]>("/templates");
+  return res.data;
+}
+
+export async function getTemplate(id: string): Promise<TemplateFile> {
+  const res = await client.get<TemplateFile>(`/templates/${id}`);
+  return res.data;
+}
+
+export async function saveTemplate(id: string, code: string): Promise<TemplateFile> {
+  const res = await client.put<TemplateFile>(`/templates/${id}`, { code });
+  return res.data;
+}
+
+export async function deleteTemplate(id: string): Promise<void> {
+  await client.delete(`/templates/${id}`);
+}
+
 // ── Diff ──
 
 export async function getDiff(

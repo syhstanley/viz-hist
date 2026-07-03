@@ -12,6 +12,7 @@ A web application for visualizing and comparing historical time-series data acro
 - **Plot Settings** — Dialog overlay to configure X axis, color grouping, tooltip columns, and manage lines.
 - **Dark Mode** — Toggle with sun/moon button, persists to localStorage, respects system preference. Plotly charts adapt.
 - **Tooltips** — Shows original + scaled values when scalar is applied. Excludes other plotted columns to avoid clutter.
+- **Custom Chart Templates** — Write JS templates (data transform + Plotly figure) in the browser editor at `/templates`. Templates declare `params` that auto-generate the chart's config UI. Stored as files in `templates/` (git-tracked). Broken template code only breaks its own chart card — never the site.
 
 ## Tech Stack
 
@@ -120,6 +121,7 @@ Folder (nested via parent_id)
 | Projects | `POST/GET/PATCH/DELETE /api/projects`, `GET /api/projects/{id}` |
 | Versions | `POST /api/projects/{id}/upload`, `GET/PATCH/DELETE .../versions/{vid}`, `GET .../versions/{vid}/data` |
 | Diff | `GET /api/projects/{id}/diff?base_id=&compare_id=` |
+| Templates | `GET /api/templates`, `GET/PUT/DELETE /api/templates/{id}` |
 | Plots | `POST/GET/PUT/DELETE /api/projects/{id}/plots/{cid}`, `POST/PATCH/DELETE .../lines/{lid}` |
 
 Full API docs available at `http://localhost:8001/docs` (Swagger UI).
@@ -127,16 +129,16 @@ Full API docs available at `http://localhost:8001/docs` (Swagger UI).
 ## Testing
 
 ```bash
-# Backend (48 tests)
+# Backend (78 tests)
 cd backend && source .venv/bin/activate && pytest tests/ -v
 
-# Frontend unit tests (19 tests)
+# Frontend unit tests (45 tests)
 cd frontend && npm test
 
-# Frontend E2E tests (11 tests)
+# Frontend E2E tests (15 tests)
 cd frontend && npm run test:e2e
 
-# Total: 78 tests
+# Total: 138 tests
 ```
 
 ## License

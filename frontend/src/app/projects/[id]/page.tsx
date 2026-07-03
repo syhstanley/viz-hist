@@ -12,10 +12,13 @@ import {
   createPlotConfig,
   updatePlotConfig,
   deletePlotConfig,
+  getTemplates,
   type ProjectDetail,
   type Version,
   type PlotConfig,
+  type TemplateFile,
 } from "@/lib/api";
+import { compileTemplate } from "@/lib/templates";
 import PlotCard from "@/components/PlotCard";
 
 import { Button } from "@/components/ui/button";
@@ -108,11 +111,12 @@ export default function ProjectPage() {
   const [addLineVersion, setAddLineVersion] = useState<string>("");
   const [addLineColumn, setAddLineColumn] = useState<string>("");
 
-  // Add plot form
+  // Add plot form — newPlotType is "line" | "diff_line" | `custom:<templateId>`
   const [showAddPlot, setShowAddPlot] = useState(false);
   const [newPlotName, setNewPlotName] = useState("");
-  const [newPlotType, setNewPlotType] = useState<"line" | "diff_line">("line");
+  const [newPlotType, setNewPlotType] = useState<string>("line");
   const [creatingPlot, setCreatingPlot] = useState(false);
+  const [availableTemplates, setAvailableTemplates] = useState<{ id: string; name: string }[]>([]);
 
   // Upload state
   const [file, setFile] = useState<File | null>(null);
@@ -236,6 +240,21 @@ export default function ProjectPage() {
     void fetchProject();
   }, [fetchProject]);
 
+  // Load custom templates for the "New Plot" type selector
+  useEffect(() => {
+    (async () => {
+      try {
+        const files: TemplateFile[] = await getTemplates();
+        setAvailableTemplates(
+          files.map((f) => {
+            const compiled = compileTemplate(f.code);
+            return { id: f.id, name: compiled.ok ? compiled.template.name : f.id };
+          })
+        );
+      } catch { /* templates are optional; selector just shows built-ins */ }
+    })();
+  }, []);
+
   // ── Handlers ──
 
   const handleUpload = async () => {
@@ -339,9 +358,13 @@ export default function ProjectPage() {
     if (!newPlotName.trim()) return;
     try {
       setCreatingPlot(true);
+      const isCustom = newPlotType.startsWith("custom:");
       const created = await createPlotConfig(projectId, {
         name: newPlotName.trim(),
-        chart_type: newPlotType,
+        chart_type: isCustom ? "custom" : newPlotType,
+        metadata_json: isCustom
+          ? { template_id: newPlotType.slice("custom:".length), params: {} }
+          : undefined,
         lines: [],
       });
       const configs = await getPlotConfigs(projectId);
@@ -723,11 +746,16 @@ export default function ProjectPage() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-sm">Type</Label>
-                    <Select value={newPlotType} onValueChange={(v) => v && setNewPlotType(v as "line" | "diff_line")}>
-                      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                    <Select value={newPlotType} onValueChange={(v) => v && setNewPlotType(v)}>
+                      <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="line">Line Chart</SelectItem>
                         <SelectItem value="diff_line">Diff Chart</SelectItem>
+                        {availableTemplates.map((t) => (
+                          <SelectItem key={t.id} value={`custom:${t.id}`}>
+                            {t.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
