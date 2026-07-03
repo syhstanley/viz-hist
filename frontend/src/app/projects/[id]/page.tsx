@@ -112,6 +112,11 @@ export default function ProjectPage() {
   const [addLineVersion, setAddLineVersion] = useState<string>("");
   const [addLineColumn, setAddLineColumn] = useState<string>("");
 
+  // Add plot form
+  const [showAddPlot, setShowAddPlot] = useState(false);
+  const [newPlotName, setNewPlotName] = useState("");
+  const [creatingPlot, setCreatingPlot] = useState(false);
+
   // Upload state
   const [file, setFile] = useState<File | null>(null);
   const [label, setLabel] = useState("");
@@ -357,19 +362,21 @@ export default function ProjectPage() {
   };
 
   const handleNewConfig = async () => {
-    const name = prompt("New config name:");
-    if (!name?.trim()) return;
+    if (!newPlotName.trim()) return;
     try {
+      setCreatingPlot(true);
       const created = await createPlotConfig(projectId, {
-        name: name.trim(),
-        x_column: xColumn || undefined,
+        name: newPlotName.trim(),
+        x_column: availableColumns[0] || undefined,
         lines: [],
       });
       const configs = await getPlotConfigs(projectId);
       setAllPlotConfigs(configs);
       loadConfig(created, versions, availableColumns);
-      showToast(`Config "${name.trim()}" created`);
-    } catch { setError("Failed to create config."); }
+      setNewPlotName("");
+      setShowAddPlot(false);
+      showToast(`Plot "${created.name}" created`);
+    } catch { setError("Failed to create plot."); } finally { setCreatingPlot(false); }
   };
 
   const handleDeleteConfig = async (configId: number) => {
@@ -799,10 +806,36 @@ export default function ProjectPage() {
               canDelete={allPlotConfigs.length > 1}
             />
           ))}
-          <Button variant="outline" className="w-full" onClick={handleNewConfig}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Plot
-          </Button>
+          {showAddPlot ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">New Plot</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-3">
+                  <Input
+                    placeholder="e.g. Revenue Trend"
+                    value={newPlotName}
+                    onChange={(e) => setNewPlotName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleNewConfig()}
+                    autoFocus
+                    className="flex-1"
+                  />
+                  <Button onClick={handleNewConfig} disabled={!newPlotName.trim() || creatingPlot}>
+                    {creatingPlot ? "Creating..." : "Create"}
+                  </Button>
+                  <Button variant="outline" onClick={() => { setShowAddPlot(false); setNewPlotName(""); }}>
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Button variant="outline" className="w-full" onClick={() => setShowAddPlot(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Plot
+            </Button>
+          )}
         </div>
       </div>
 
